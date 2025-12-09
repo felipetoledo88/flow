@@ -1,55 +1,7 @@
-import axios from 'axios';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
-
-// Configuração base do axios
-const api = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
-
-// Interceptor para adicionar token em todas as requisições
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
-
-// Interceptor para tratar erros de resposta
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    // Só faz logout se for realmente um erro de autenticação
-    if (error.response?.status === 401) {
-      const errorMessage = error.response?.data?.message || '';
-      
-      // Não faz logout para erros específicos
-      if (errorMessage === 'Invalid credentials' || 
-          errorMessage.includes('validation') ||
-          errorMessage.includes('Unauthorized')) {
-        return Promise.reject(error);
-      }
-      
-      // Para outros erros 401, faz logout
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.location.href = '/login';
-    }
-    return Promise.reject(error);
-  }
-);
+import { api } from './index';
 
 export interface Project {
-  id: string;
+  id: number;
   name: string;
   description?: string;
   status: 'active' | 'completed' | 'paused' | 'cancelled';

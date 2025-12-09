@@ -13,6 +13,7 @@ import StatusOptionsMenu from './StatusOptionsMenu';
 import DeleteStatusModal from './DeleteStatusModal';
 import TaskDetailsModal from './TaskDetailsModal';
 import { toast } from '@/hooks/use-toast';
+import { toast as sonnerToast } from 'sonner';
 import {
   DndContext,
   DragEndEvent,
@@ -460,7 +461,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, projectId, onTaskStatu
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
-    
+
     if (!over || active.id === over.id) {
       setActiveTask(null);
       setActiveColumn(null);
@@ -470,9 +471,9 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, projectId, onTaskStatu
     // Verifica se está movendo uma coluna
     if (active.id.toString().startsWith('column-')) {
       const activeColumnId = parseInt(active.id.toString().replace('column-', ''));
-      
+
       let overColumnId: number | null = null;
-      
+
       // Verifica se foi dropado diretamente em uma coluna
       if (over.id.toString().startsWith('column-')) {
         overColumnId = parseInt(over.id.toString().replace('column-', ''));
@@ -489,11 +490,11 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, projectId, onTaskStatu
           }
         }
       }
-      
+
       if (overColumnId && activeColumnId !== overColumnId) {
         await handleColumnReorder(activeColumnId, overColumnId);
       }
-      
+
       setActiveTask(null);
       setActiveColumn(null);
       return;
@@ -502,7 +503,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, projectId, onTaskStatu
     // Lógica existente para mover tarefas
     const taskId = active.id as number;
     let newStatusId: number;
-    
+
     // Verifica se foi dropado em uma coluna (status)
     if (over.id.toString().startsWith('column-')) {
       const columnId = parseInt(over.id.toString().replace('column-', ''));
@@ -531,10 +532,46 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, projectId, onTaskStatu
       return;
     }
 
+    // Verificar se está tentando mover para "Concluído" sem horas lançadas
+    const newStatus = statuses.find(s => s.id === newStatusId);
+    const isMovingToCompleted = newStatus?.code === 'completed';
+
+    if (isMovingToCompleted && Number(currentTask.actualHours) <= 0) {
+      // Não fazer atualização otimista - mostrar erro imediatamente
+      sonnerToast.error('Não é possível marcar a atividade como concluída sem lançar horas. Acesse "Lançar Horas" primeiro.');
+      setActiveTask(null);
+      setActiveColumn(null);
+      return;
+    }
+
+    // Atualização otimista (optimistic update) - atualiza a UI imediatamente
+    if (newStatus) {
+      setLocalTasks(prevTasks =>
+        prevTasks.map(task =>
+          task.id === taskId
+            ? { ...task, status: newStatus, statusId: newStatusId }
+            : task
+        )
+      );
+    }
+
     try {
       await onTaskStatusChange(taskId, newStatusId);
     } catch (error) {
       console.error('Erro ao atualizar status da tarefa:', error);
+      // Reverter a atualização otimista em caso de erro
+      setLocalTasks(prevTasks =>
+        prevTasks.map(task =>
+          task.id === taskId
+            ? { ...task, status: currentTask.status, statusId: currentTask.status.id }
+            : task
+        )
+      );
+      toast({
+        title: "Erro ao atualizar status",
+        description: "Não foi possível atualizar o status da tarefa. Tente novamente.",
+        variant: "destructive",
+      });
     }
 
     setActiveTask(null);

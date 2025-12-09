@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import LoginForm from "../components/auth/LoginForm";
 import { useAuth } from '../hooks/use-auth';
 import { NewLoader } from '@/components/ui/new-loader';
+import { toast } from 'sonner';
 
 const LoginPage = () => {
   const { isAuthenticated, isLoading } = useAuth();
@@ -15,6 +16,18 @@ const LoginPage = () => {
       navigate(from, { replace: true });
     }
   }, [isAuthenticated, isLoading, navigate, location]);
+
+  // Verifica se foi redirecionado por sessão expirada
+  useEffect(() => {
+    const sessionExpired = localStorage.getItem('sessionExpired');
+    if (sessionExpired === 'true') {
+      localStorage.removeItem('sessionExpired');
+      toast.error('Sessão expirada', {
+        description: 'Seu token de autenticação expirou. Faça login novamente para continuar.',
+        duration: 5000,
+      });
+    }
+  }, []);
 
   if (isLoading) {
     return (

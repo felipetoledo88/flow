@@ -74,6 +74,7 @@ import {
   Upload,
   Check,
   ChevronsUpDown,
+  RefreshCcw,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { FastReorderProvider } from '@/components/ui/fast-reorder';
@@ -102,8 +103,23 @@ const ScheduleDetailsPage = () => {
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isBacklogCardCollapsed, setIsBacklogCardCollapsed] = useState(true);
+  const [actualExpectedEndDate, setActualExpectedEndDate] = useState<Date | null>(null);
+  
+  // Calcula a data fim prevista atual em tempo real
+  const calculatedActualExpectedEndDate = useMemo(() => {
+    if (!schedule?.tasks) return null;
+    const activeTasks = schedule.tasks.filter(t => !t.isBacklog && t.endDate);
+    if (activeTasks.length === 0) return null;
+    
+    const latestEndDate = activeTasks.reduce((latest, task) => {
+      const taskEndDate = new Date(task.endDate);
+      return taskEndDate > latest ? taskEndDate : latest;
+    }, new Date(activeTasks[0].endDate));
+    
+    return latestEndDate;
+  }, [schedule?.tasks?.map(t => `${t.id}-${t.endDate}-${t.isBacklog}`).join(',')]);
+  
   const [collapsedSprints, setCollapsedSprints] = useState<Set<number>>(new Set());
-  const [backlogTasks, setBacklogTasks] = useState<ScheduleTask[]>([]);
   const [sprints, setSprints] = useState<Sprint[]>([]);
   const [statusSprints, setStatusSprints] = useState<StatusSprint[]>([]);
   const [isSprintModalOpen, setIsSprintModalOpen] = useState(false);
@@ -163,12 +179,11 @@ const ScheduleDetailsPage = () => {
 
       if (schedule?.project?.id.toString() === projectId.toString()) {
         try {
-          // Não mostrar toast aqui, pois o modal já mostrou
           await SchedulesService.forceRecalculateSchedule(schedule.project.id);
 
           setTimeout(() => {
-            loadScheduleData(true); // Force reload da tela
-          }, 1000); // Delay para garantir que o backend processou a mudança
+            loadScheduleData(true);
+          }, 1000);
           
         } catch (error) {
           console.error('Erro ao sincronizar atividades na tela:', error);
@@ -195,6 +210,41 @@ const ScheduleDetailsPage = () => {
     }
   }, [activeTab, refreshDashboard]);
 
+  // Inicializa a data fim prevista atual quando o schedule é carregado
+  useEffect(() => {
+    if (schedule?.tasks && schedule.tasks.length > 0) {
+      const activeTasks = schedule.tasks.filter(t => !t.isBacklog && t.endDate);
+      if (activeTasks.length > 0) {
+        const latestEndDate = activeTasks.reduce((latest, task) => {
+          const taskEndDate = new Date(task.endDate);
+          return taskEndDate > latest ? taskEndDate : latest;
+        }, new Date(activeTasks[0].endDate));
+        setActualExpectedEndDate(latestEndDate);
+      }
+    }
+  }, [schedule?.id, schedule?.tasks?.length]);
+
+  // Monitora mudanças no valor calculado
+  useEffect(() => {
+    if (!calculatedActualExpectedEndDate || !schedule?.id) return;
+    const dateString = calculatedActualExpectedEndDate.toISOString().split("T")[0];
+    const sync = async () => {
+      await ProjectsService.updateProject(schedule.id, {
+        actualExpectedEndDate: dateString
+      });
+      await refreshDashboard();
+
+      setSchedule(prev => ({
+        ...prev!,
+        project: {
+          ...prev!.project!,
+          actualExpectedEndDate: dateString
+        }
+      }));
+    };
+    sync();
+  }, [calculatedActualExpectedEndDate, schedule?.id]);
+
 
   const toggleSidebar = () => {
     setSidebarOpen(!sidebarOpen);
@@ -220,7 +270,6 @@ const ScheduleDetailsPage = () => {
           throw new Error('Cronograma não está associado a um projeto');
         }
       }
-
       setSchedule(scheduleData);
       if (scheduleData.project) {
         setSelectedProject({
@@ -231,13 +280,10 @@ const ScheduleDetailsPage = () => {
         setShowAllProjects(false);
       }
       const backlogTasksFromAPI = (scheduleData.tasks || []).filter(task => task.isBacklog);
-      setBacklogTasks(backlogTasksFromAPI);
+      setBacklogTasks();
       if (scheduleData.project?.id) {
         await loadSprints(scheduleData.project.id);
       }
-      setTimeout(() => {
-        updateActualExpectedEndDate();
-      }, 100);
     } catch (error: any) {
       toast.error(`Erro ao carregar cronograma: ${error.message}`);
       const isProjectRoute = location.pathname.includes('/projects/');
@@ -276,11 +322,7 @@ const ScheduleDetailsPage = () => {
 
     try {
       setIsUpdatingTasks(true);
-      
-      // Busca apenas as tarefas atualizadas (mais rápido e suave)
       const updatedTasks = await SchedulesService.getTasksOnly(parseInt(id));
-      
-      // Atualiza o schedule mantendo todas as outras propriedades
       const updatedSchedule = {
         ...schedule,
         tasks: updatedTasks
@@ -288,9 +330,8 @@ const ScheduleDetailsPage = () => {
       
       setSchedule(updatedSchedule);
       const backlogTasksFromAPI = updatedTasks.filter(task => task.isBacklog);
-      setBacklogTasks(backlogTasksFromAPI);
+      setBacklogTasks();
       await refreshDashboard();
-      
     } catch (error) {
       await loadScheduleData(false);
     } finally {
@@ -384,7 +425,6 @@ const ScheduleDetailsPage = () => {
       setTransferTasksModal(prev => ({ ...prev, isOpen: false }));
       await new Promise(resolve => setTimeout(resolve, 500));
       await refreshTasksOnly();
-      await updateActualExpectedEndDate();
       
       toast.success(
         `Sprint concluída! ${transferResult.transferredCount} atividades transferidas para "${transferResult.nextSprintName}"`
@@ -472,7 +512,6 @@ const ScheduleDetailsPage = () => {
         const reorderResult = await SchedulesService.reorderTasksAfterSprintCompletion(sprintId);
         if (reorderResult.reorderedCount > 0) {
           await refreshTasksOnly();
-          await updateActualExpectedEndDate();
           toast.success(`Sprint concluída! ${reorderResult.reorderedCount} atividades reordenadas (concluídas primeiro).`);
         } else {
           toast.success('Sprint marcada como concluída!');
@@ -546,14 +585,8 @@ const ScheduleDetailsPage = () => {
     try {
       await SchedulesService.deleteTask(taskToDelete.id);
       toast.success('Atividade excluída com sucesso');
-      if (schedule) {
-        const updatedSchedule = { ...schedule };
-        if (updatedSchedule.tasks) {
-          updatedSchedule.tasks = updatedSchedule.tasks.filter(t => t.id !== taskToDelete.id);
-        }
-        setSchedule(updatedSchedule);
-      }
-      setBacklogTasks(prev => prev.filter(task => task.id !== taskToDelete.id));
+      await loadScheduleData(false);
+      await refreshDashboard();
     } catch (error: any) {
       const errorMessage = error.message || 'Erro ao excluir atividade';
       toast.error(errorMessage);
@@ -599,7 +632,6 @@ const ScheduleDetailsPage = () => {
       await SchedulesService.updateTask(taskId, updateData);
       toast.success('Responsável atualizado com sucesso');
       await refreshTasksOnly();
-      await updateActualExpectedEndDate();
     } catch (error: any) {
       toast.error('Erro ao atualizar responsável');
     }
@@ -607,7 +639,7 @@ const ScheduleDetailsPage = () => {
 
   const handleUpdateStatus = async (taskId: number, statusId: number) => {
     const completedStatusId = getStatusId(TaskStatusCode.COMPLETED);
-    const currentTask = [...backlogTasks, ...(schedule?.tasks || [])].find(t => t.id === taskId);
+    const currentTask = [...(schedule?.tasks || [])].find(t => t.id === taskId);
     const wasCompleted = currentTask && currentTask.statusId === completedStatusId;
     const isBeingCompleted = completedStatusId && statusId === completedStatusId;
 
@@ -640,12 +672,6 @@ const ScheduleDetailsPage = () => {
           }
           setSchedule(updatedSchedule);
         }
-        setBacklogTasks(prev => prev.map(task =>
-          task.id === taskId ? { ...task, statusId } : task
-        ));
-        await updateActualExpectedEndDate();
-        await refreshDashboard();
-        toast.success('Status atualizado com sucesso');
       }
     } catch (error: any) {
       toast.error(`Erro ao atualizar status: ${error.response?.data?.message || error.message}`);
@@ -662,9 +688,6 @@ const ScheduleDetailsPage = () => {
           setSchedule(updatedSchedule);
         }
       }
-      setBacklogTasks(prev => 
-        prev.map(task => task.id === updatedTask.id ? updatedTask : task)
-      );
       updateActualExpectedEndDate();
     }
   };
@@ -677,14 +700,30 @@ const ScheduleDetailsPage = () => {
   const handleSprintChange = async (taskId: number, sprintId: number | null, moveToBacklog: boolean) => {
     try {
       if (moveToBacklog) {
-        const task = [...backlogTasks, ...(schedule?.tasks || [])].find(t => t.id === taskId);
+        const task = getAllTasks().find(t => t.id === taskId);
+        const originalActualHours = task?.actualHours;
+        const originalEstimatedHours = task?.estimatedHours;
+
         if (task?.sprintId) {
           await SchedulesService.updateTaskSprint(taskId, null);
         }
-        await SchedulesService.updateTaskBacklogStatus(taskId, true);
+        const updatedTask = await SchedulesService.updateTaskBacklogStatus(taskId, true);
+        
+        // Verificar se as horas foram resetadas pelo backend e corrigi-las
+        if ((updatedTask.actualHours === 0 || updatedTask.actualHours === 0 || updatedTask.actualHours === 0.00) && originalActualHours && Number(originalActualHours) > 0) {
+          try {
+            await SchedulesService.updateTask(taskId, {
+              actualHours: Number(originalActualHours),
+              estimatedHours: originalEstimatedHours ? Number(originalEstimatedHours) : undefined
+            });
+          } catch (restoreError) {
+            console.error(`[DEBUG] Erro ao restaurar horas:`, restoreError);
+          }
+        }
+        
         toast.success('Atividade movida para o backlog!');
       } else if (sprintId !== null) {
-        const task = [...backlogTasks, ...(schedule?.tasks || [])].find(t => t.id === taskId);
+        const task = getAllTasks().find(t => t.id === taskId);
         if (task?.isBacklog) {
           await SchedulesService.updateTaskBacklogStatus(taskId, false);
         }
@@ -692,8 +731,12 @@ const ScheduleDetailsPage = () => {
         const sprint = sprints.find(s => s.id === sprintId);
         toast.success(`Atividade movida para a sprint "${sprint?.name}"!`);
       }
-      await updateActualExpectedEndDate();
       await refreshTasksOnly();
+      
+      // Debug: Log das horas depois da operação
+      if (moveToBacklog) {
+        const taskAfter = getAllTasks().find(t => t.id === taskId);
+      }
     } catch (error: any) {
       toast.error('Erro ao alterar sprint da atividade');
     }
@@ -735,15 +778,13 @@ const ScheduleDetailsPage = () => {
 
   const applyFilters = (tasks: ScheduleTask[]) => {
     let filteredTasks = tasks;
-    
-    // Filtro por responsável (múltiplos)
+
     if (selectedAssignees.length > 0) {
       filteredTasks = filteredTasks.filter(task => 
         selectedAssignees.includes(task.assigneeId?.toString() || '')
       );
     }
-    
-    // Filtro por status
+
     if (selectedStatus !== 'all') {
       filteredTasks = filteredTasks.filter(task => 
         task.statusId?.toString() === selectedStatus
@@ -768,6 +809,15 @@ const ScheduleDetailsPage = () => {
   const getFilteredAllTasks = () => {
     if (!schedule?.tasks) return [];
     return applyFilters(schedule.tasks);
+  };
+
+  const getAllTasks = (): ScheduleTask[] => {
+    return schedule?.tasks || [];
+  };
+
+  const setBacklogTasks = (): ScheduleTask[] => {
+    if (!schedule?.tasks) return [];
+    return schedule.tasks.filter(task => task.isBacklog);
   };
 
   const getSelectedAssigneesText = () => {
@@ -817,7 +867,7 @@ const ScheduleDetailsPage = () => {
       const taskEndDate = new Date(task.endDate);
       return taskEndDate > latest ? taskEndDate : latest;
     }, new Date(activeTasks[0].endDate));
-    return latestEndDate.toISOString().split('T')[0]; // Retorna no formato YYYY-MM-DD
+    return latestEndDate.toISOString().split('T')[0];
   };
 
   const updateActualExpectedEndDate = async () => {
@@ -830,15 +880,41 @@ const ScheduleDetailsPage = () => {
       await ProjectsService.updateProject(schedule.id, {
         actualExpectedEndDate
       });
+
+      await refreshDashboard();
     } catch (error) {
       console.error('Erro ao atualizar data fim prevista atual:', error);
     }
   };
 
+  const handleRecalculateAssignee = async () => {
+    try {
+      setLoading(true);
+      const assigneeIds = new Set<number>();
+      schedule?.tasks?.forEach(task => {
+        if (task.assigneeId && !task.isBacklog) {
+          assigneeIds.add(task.assigneeId);
+        }
+      });
+      const projectId = schedule?.project?.id || parseInt(id!);
+      for (const assigneeId of assigneeIds) {
+        await SchedulesService.recalculateAssigneeOrder(projectId, assigneeId);
+      }
+      
+      await loadScheduleData(false);
+      await refreshDashboard();
+      toast.success(`Order recalculado para ${assigneeIds.size} responsável(is) com sucesso`);
+    } catch (error: any) {
+      toast.error('Erro ao recalcular order das atividades');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleFastReorder = async (sourceId: string, targetId: string, insertPosition: 'before' | 'after') => {
     try {
-      const sourceTask = [...backlogTasks, ...(schedule?.tasks || [])].find(t => t.id.toString() === sourceId);
-      const targetTask = [...backlogTasks, ...(schedule?.tasks || [])].find(t => t.id.toString() === targetId);
+      const sourceTask = getAllTasks().find(t => t.id.toString() === sourceId);
+      const targetTask = getAllTasks().find(t => t.id.toString() === targetId);
       if (!sourceTask || !targetTask) {
         return;
       }
@@ -847,7 +923,7 @@ const ScheduleDetailsPage = () => {
       const isTargetInBacklog = targetTask.isBacklog;
       
       if (isSourceInBacklog && isTargetInBacklog) {
-        const sortedBacklog = [...backlogTasks].sort((a, b) => a.order - b.order);
+        const sortedBacklog = setBacklogTasks().sort((a, b) => a.order - b.order);
         const sourceIndex = sortedBacklog.findIndex(t => t.id.toString() === sourceId);
         const targetIndex = sortedBacklog.findIndex(t => t.id.toString() === targetId);
         if (sourceIndex === -1 || targetIndex === -1) return;
@@ -859,17 +935,11 @@ const ScheduleDetailsPage = () => {
           taskId: task.id,
           newOrder: index
         }));
-        const updatedBacklogTasks = reorderedTasks.map((task, index) => ({
-          ...task,
-          order: index
-        }));
-        setBacklogTasks(updatedBacklogTasks);
+        
         await SchedulesService.reorderTasks(parseInt(id!), reorderData);
-        await updateActualExpectedEndDate();
         await refreshTasksOnly();
         toast.success('Ordem das atividades no backlog atualizada!');
       } else if (!isSourceInBacklog && !isTargetInBacklog && sourceTask.sprintId === targetTask.sprintId) {
-        // Reordenação dentro da mesma sprint - usar apenas tarefas da sprint atual
         const sprintTasks = [...(schedule?.tasks || [])].filter(t => 
           t.sprintId === sourceTask.sprintId && !t.isBacklog
         ).sort((a, b) => a.order - b.order);
@@ -906,7 +976,6 @@ const ScheduleDetailsPage = () => {
         }
         
         await SchedulesService.reorderTasks(parseInt(id!), reorderData);
-        await updateActualExpectedEndDate();
         await refreshTasksOnly();
         const sprint = sprints.find(s => s.id === sourceTask.sprintId);
         toast.success(`Ordem das atividades na sprint "${sprint?.name}" atualizada!`);
@@ -926,18 +995,44 @@ const ScheduleDetailsPage = () => {
 
   const handleFastMove = async (taskId: number, targetContainerId: string) => {
     try {
-      const task = [...backlogTasks, ...(schedule?.tasks || [])].find(t => t.id === taskId);
+      const task = getAllTasks().find(t => t.id === taskId);
       if (!task) {
         return;
       }
       if (targetContainerId === 'backlog') {
+        const originalActualHours = task.actualHours;
+        const originalEstimatedHours = task.estimatedHours;
+        
         if (task.sprintId) {
           const sprint = sprints.find(s => s.id === task.sprintId);
           await SchedulesService.updateTaskSprint(taskId, null);
-          await SchedulesService.updateTaskBacklogStatus(taskId, true);
+          const updatedTask = await SchedulesService.updateTaskBacklogStatus(taskId, true);
+
+          if ((updatedTask.actualHours === 0 || updatedTask.actualHours === 0 || updatedTask.actualHours === 0.00) && originalActualHours && Number(originalActualHours) > 0) {
+            try {
+              await SchedulesService.updateTask(taskId, {
+                actualHours: Number(originalActualHours),
+                estimatedHours: originalEstimatedHours ? Number(originalEstimatedHours) : undefined
+              });
+            } catch (restoreError) {
+              console.error(`[DEBUG] Drag&Drop - Erro ao restaurar horas:`, restoreError);
+            }
+          }
+          
           toast.success(`Atividade removida da sprint "${sprint?.name}" e movida para o backlog!`);
         } else {
-          await SchedulesService.updateTaskBacklogStatus(taskId, true);
+          const updatedTask = await SchedulesService.updateTaskBacklogStatus(taskId, true);
+          if ((updatedTask.actualHours === 0 || updatedTask.actualHours === 0 || updatedTask.actualHours === 0.00) && originalActualHours && Number(originalActualHours) > 0) {
+            try {
+              await SchedulesService.updateTask(taskId, {
+                actualHours: Number(originalActualHours),
+                estimatedHours: originalEstimatedHours ? Number(originalEstimatedHours) : undefined
+              });
+            } catch (restoreError) {
+              console.error(`[DEBUG] Drag&Drop - Erro ao restaurar horas:`, restoreError);
+            }
+          }
+          
           toast.success('Atividade movida para o backlog!');
         }
       } else if (targetContainerId.startsWith('sprint-')) {
@@ -953,10 +1048,11 @@ const ScheduleDetailsPage = () => {
           toast.success(`Atividade movida da sprint "${sourceSprint?.name}" para "${targetSprint?.name}"!`);
         }
       }
-      
-      // Atualizar UI e recalcular datas
       await refreshTasksOnly();
-      await updateActualExpectedEndDate();
+
+      if (targetContainerId === 'backlog') {
+        const taskAfter = getAllTasks().find(t => t.id === taskId);
+      }
       
     } catch (error) {
       toast.error('Erro ao mover atividade. Tente novamente.');
@@ -1106,12 +1202,6 @@ const ScheduleDetailsPage = () => {
                 <h1 className="text-3xl font-bold flex items-center gap-2">
                   <Calendar className="h-8 w-8 text-primary" />
                   {schedule?.name || 'Carregando...'}
-                  {isUpdatingTasks && (
-                    <div className="flex items-center text-sm text-muted-foreground ml-2">
-                      <div className="animate-spin h-4 w-4 border-2 border-blue-600 border-t-transparent rounded-full mr-1"></div>
-                      Atualizando...
-                    </div>
-                  )}
                 </h1>
               </div>
               {currentUser && currentUser.role !== 'client' && (activeTab === 'schedule' || activeTab === 'kanban') && (
@@ -1270,32 +1360,41 @@ const ScheduleDetailsPage = () => {
                       <CardTitle className="text-lg font-semibold">Detalhes do Cronograma</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="grid grid-cols-3 gap-4">
-                        <div>
-                          <p className="text-sm text-muted-foreground">Data de Início</p>
-                          <p className="text-base font-medium">
-                            {schedule?.startDate ? formatDate(schedule.startDate) : 'Não definida'}
-                          </p>
+                      <div className="flex flex-col space-y-4">
+                        <div className="grid grid-cols-3 gap-4">
+                          <div>
+                            <p className="text-sm text-muted-foreground">Data de Início</p>
+                            <p className="text-base font-medium">
+                              {schedule?.startDate ? formatDate(schedule.startDate) : 'Não definida'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground">Data Fim Prevista (Inicial)</p>
+                            <p className="text-base font-medium">
+                              {schedule?.project?.endDate ? formatDate(schedule.project.endDate) : 'Não definida'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground">Data Fim Prevista (Atual)</p>
+                            <p className="text-base font-medium">
+                              {calculatedActualExpectedEndDate ? formatDate(calculatedActualExpectedEndDate) : 'Não definida'}
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-sm text-muted-foreground">Data Fim Prevista (Inicial)</p>
-                          <p className="text-base font-medium">
-                            {schedule?.project?.endDate ? formatDate(schedule.project.endDate) : 'Não definida'}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-muted-foreground">Data Fim Prevista (Atual)</p>
-                          <p className="text-base font-medium">
-                            {(schedule?.tasks || []).filter(t => !t.isBacklog).length > 0
-                              ? formatDate(
-                                  (schedule?.tasks || []).filter(t => !t.isBacklog).reduce((latest, task) => {
-                                    const taskEndDate = new Date(task.endDate);
-                                    return taskEndDate > latest ? taskEndDate : latest;
-                                  }, new Date((schedule?.tasks || []).filter(t => !t.isBacklog)[0].endDate))
-                                )
-                              : 'Não definida'}
-                          </p>
-                        </div>
+                        {canEditSchedule() && (
+                          <div className="flex justify-end">
+                            <Button
+                              onClick={handleRecalculateAssignee}
+                              variant="outline"
+                              size="sm"
+                              className="flex items-center gap-2"
+                              disabled={loading}
+                            >
+                              <RefreshCcw className="h-4 w-4" />
+                              Recalcular Tarefas
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     </CardContent>
                   </Card>
@@ -1484,35 +1583,33 @@ const ScheduleDetailsPage = () => {
 
                     {/* Card Backlog */}
                     <Card>
-                        <CardHeader className="relative flex flex-col xl:flex-row items-start xl:items-center xl:justify-between space-y-2 xl:space-y-0 pb-3">
-                          {/* Drop zone no cabeçalho do backlog */}
-                          <BacklogHeaderDropZone />
-                          
-                          <CardTitle className="flex items-center gap-2">
-                            Backlog
-                            <span className="text-sm font-normal text-muted-foreground">
-                              ({getFilteredBacklogTasks().length})
-                            </span>
-                          </CardTitle>
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            onClick={toggleBacklogCard}
-                            className="h-8 w-8 p-0 mt-2 xl:mt-0"
-                          >
-                            {isBacklogCardCollapsed ? (
-                              <ChevronDown className="h-4 w-4" />
-                            ) : (
-                              <ChevronUp className="h-4 w-4" />
-                            )}
-                          </Button>
-                        </CardHeader>
-                        
+                      <CardHeader className="relative flex flex-col xl:flex-row items-start xl:items-center xl:justify-between space-y-2 xl:space-y-0 pb-3">
+                        {/* Drop zone no cabeçalho do backlog */}
+                        <BacklogHeaderDropZone />
+                        <CardTitle className="flex items-center gap-2">
+                          Backlog
+                          <span className="text-sm font-normal text-muted-foreground">
+                            ({getFilteredBacklogTasks().length})
+                          </span>
+                        </CardTitle>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={toggleBacklogCard}
+                          className="h-8 w-8 p-0 mt-2 xl:mt-0"
+                        >
+                          {isBacklogCardCollapsed ? (
+                            <ChevronDown className="h-4 w-4" />
+                          ) : (
+                            <ChevronUp className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </CardHeader>  
                         {isBacklogCardCollapsed && (
                           <CardContent className="p-0">
-                            {backlogTasks.length > 0 ? (
+                            {getFilteredBacklogTasks().length > 0 ? (
                               <FastTaskTable
-                                tasks={backlogTasks}
+                                tasks={getFilteredBacklogTasks()}
                                 containerId="backlog"
                                 formatDate={formatDate}
                                 calculateProgress={calculateProgress}
@@ -1577,7 +1674,7 @@ const ScheduleDetailsPage = () => {
       <EditProjectModal
         isOpen={isEditProjectModalOpen}
         onClose={() => setIsEditProjectModalOpen(false)}
-        project={schedule?.project || null}
+        project={schedule?.project}
         onSave={handleEditProjectSaved}
         shouldRecalculateSchedule={true}
         key="schedule-details-modal"

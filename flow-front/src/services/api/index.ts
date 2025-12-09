@@ -27,11 +27,26 @@ api.interceptors.request.use(
 // Interceptor para tratar erros de resposta
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    // Tratar erros comuns
+  async (error) => {
+    // Só faz logout se for realmente um erro de autenticação
     if (error.response?.status === 401) {
-      // Token inválido ou expirado
+      const requestUrl = error.config?.url || '';
+
+      // Não faz logout apenas para erros de login/register
+      const isLoginOrRegisterRequest = requestUrl.includes('/auth/login') || requestUrl.includes('/auth/register');
+
+      if (isLoginOrRegisterRequest) {
+        // Erros de login/register não causam logout
+        return Promise.reject(error);
+      }
+
+      // Para qualquer outro 401 (token expirado/inválido), desloga
+      // Limpa dados e marca flag de sessão expirada
       localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      localStorage.setItem('sessionExpired', 'true');
+
+      // Redireciona imediatamente para login
       window.location.href = '/login';
     }
     return Promise.reject(error);

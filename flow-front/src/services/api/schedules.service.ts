@@ -1,4 +1,4 @@
-import axios from 'axios';
+import { api } from './index';
 import {
   Schedule,
   ScheduleTask,
@@ -7,53 +7,10 @@ import {
   TaskComment,
   CreateScheduleDto,
   UpdateScheduleDto,
-  CreateScheduleTaskDto,
   UpdateScheduleTaskDto,
   UpdateTaskHoursDto,
   CreateTaskDependencyDto,
 } from '../../types/schedule';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
-
-const api = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
-
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
-
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      const errorMessage = error.response?.data?.message || '';
-
-      if (errorMessage === 'Invalid credentials' ||
-          errorMessage.includes('validation') ||
-          errorMessage.includes('Unauthorized')) {
-        return Promise.reject(error);
-      }
-
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.location.href = '/login';
-    }
-    return Promise.reject(error);
-  }
-);
 
 export class SchedulesService {
   // Schedule CRUD
@@ -82,9 +39,7 @@ export class SchedulesService {
     await api.delete(`/schedules/${id}`);
   }
 
-  // Task CRUD
   static async getTasksBySchedule(scheduleId: number): Promise<ScheduleTask[]> {
-    // Agora o scheduleId é na verdade um projectId
     const response = await api.get<ScheduleTask[]>(`/projects/${scheduleId}/tasks`);
     return response.data;
   }
@@ -96,9 +51,8 @@ export class SchedulesService {
 
   static async createTask(
     scheduleId: number,
-    data: CreateScheduleTaskDto
+    data: CreateScheduleDto
   ): Promise<ScheduleTask> {
-    // Agora o scheduleId é na verdade um projectId
     const response = await api.post<ScheduleTask>(
       `/projects/${scheduleId}/tasks`,
       data
@@ -193,33 +147,30 @@ export class SchedulesService {
     return response.data;
   }
 
-  // Get only tasks for a schedule (without full schedule data)
   static async getTasksOnly(scheduleId: number): Promise<ScheduleTask[]> {
-    // Agora o scheduleId é na verdade um projectId
     const response = await api.get<ScheduleTask[]>(`/projects/${scheduleId}/tasks`);
     return response.data;
   }
 
-  // Force recalculate a specific task and get updated data
   static async forceRecalculateTask(taskId: number): Promise<{ task: ScheduleTask }> {
     const response = await api.post<{ task: ScheduleTask }>(`/schedules/tasks/${taskId}/force-recalculate`);
     return response.data;
   }
 
-  // Force recalculate all tasks of a schedule (used when project dates change)
   static async forceRecalculateSchedule(scheduleId: number): Promise<ScheduleTask[]> {
     const response = await api.post<ScheduleTask[]>(`/schedules/${scheduleId}/force-recalculate`);
     return response.data;
   }
 
-  // Reorder tasks after sprint completion (completed tasks first)
   static async reorderTasksAfterSprintCompletion(sprintId: number): Promise<{ reorderedCount: number; details: any[] }> {
     const response = await api.post<{ reorderedCount: number; details: any[] }>(`/schedules/sprints/${sprintId}/reorder-after-completion`);
     return response.data;
   }
 
+  static async recalculateAssigneeOrder(projectId: number, assigneeId: number): Promise<void> {
+    await api.patch(`/projects/${projectId}/tasks/assignee/${assigneeId}/recalculate-order`);
+  }
 
-  // Import tasks in bulk from CSV/Excel file
   static async importTasks(
     projectId: number,
     file: File

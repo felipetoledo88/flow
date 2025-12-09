@@ -298,13 +298,33 @@ export const useDashboardCalculations = (
             ? new Date(projectInfo.actualExpectedEndDate + 'T00:00:00').toLocaleDateString('pt-BR')
             : "N/A";
         })(),
-        unit: projectEndInfo.daysRemaining !== null
-          ? projectEndInfo.daysRemaining >= 0
-            ? projectEndInfo.daysRemaining === 0 
-              ? "no prazo" 
-              : `${projectEndInfo.daysRemaining} dias antecipado`
-            : `${Math.abs(projectEndInfo.daysRemaining)} dias em atraso`
-          : "sem prazo",
+        unit: (() => {
+          // Se uma sprint específica for selecionada, calcular dias restantes até o fim da sprint
+          if (sprintFilter && sprintFilter !== 'all' && selectedSprintData?.expectEndDate) {
+            const today = new Date();
+            const todayUTC = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+            const sprintEndDate = new Date(selectedSprintData.expectEndDate + 'T00:00:00.000Z');
+            const diffTime = sprintEndDate.getTime() - todayUTC.getTime();
+            const daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            
+            if (daysRemaining > 0) {
+              return `${daysRemaining} dias restantes`;
+            } else if (daysRemaining === 0) {
+              return "termina hoje";
+            } else {
+              return `Já passou do prazo`;
+            }
+          }
+          
+          // Caso contrário, usar a lógica original do projeto
+          return projectEndInfo.daysRemaining !== null
+            ? projectEndInfo.daysRemaining >= 0
+              ? projectEndInfo.daysRemaining === 0 
+                ? "no prazo" 
+                : `${projectEndInfo.daysRemaining} dias antecipado`
+              : `${Math.abs(projectEndInfo.daysRemaining)} dias em atraso`
+            : "sem prazo";
+        })(),
         additionalInfo: (() => {
           // Se uma sprint específica for selecionada, mostrar informação da sprint
           if (sprintFilter && sprintFilter !== 'all' && selectedSprintData?.expectDate && selectedSprintData?.expectEndDate) {

@@ -23,7 +23,8 @@ import { SprintsService, Sprint } from '@/services/api/sprints.service';
 import { AuthService } from '@/services/api/auth.service';
 import { User } from '@/types/auth';
 import { toast } from 'sonner';
-import { Loader2, Paperclip, Download, FileIcon, Trash2 } from 'lucide-react';
+import { Loader2, Paperclip, Download, FileIcon, Trash2, Send, X } from 'lucide-react';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useTaskStatus } from '@/hooks';
 
 interface TaskFormModalProps {
@@ -55,7 +56,7 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({
   teamMembers = [],
   onSave,
 }) => {
-  const { statuses, isLoading: statusesLoading, getStatusId, getStatusByCode } = useTaskStatus(projectId);
+  const { statuses, isLoading: statusesLoading, getStatusId } = useTaskStatus(projectId);
 
   const [formData, setFormData] = useState<FormData>({
     title: '',
@@ -74,7 +75,10 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({
   const [schedule, setSchedule] = useState<Schedule | null>(null);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [existingAttachments, setExistingAttachments] = useState<TaskComment[]>([]);
+  const [newComment, setNewComment] = useState('');
+  const [comments, setComments] = useState<TaskComment[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const commentFileInputRef = useRef<HTMLInputElement>(null);
   const isEditing = !!task;
 
   useEffect(() => {
@@ -84,7 +88,6 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({
     }
   }, []);
 
-  // Definir statusId padrão quando os status forem carregados
   useEffect(() => {
     if (statuses.length > 0 && formData.statusId === 0) {
       const todoStatusId = getStatusId(TaskStatusCode.TODO);
@@ -94,16 +97,12 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({
     }
   }, [statuses, formData.statusId, getStatusId]);
 
-  // Carregar sprints do projeto quando o modal abrir
   useEffect(() => {
     const loadSprintsAndSchedule = async () => {
       if (isOpen && scheduleId) {
         try {
-          // Carregar cronograma para obter o projeto
           const scheduleData = await SchedulesService.getSchedule(scheduleId);
           setSchedule(scheduleData);
-          
-          // Carregar sprints do projeto
           if (scheduleData.project?.id) {
             const projectSprints = await SprintsService.getSprints(scheduleData.project.id);
             setSprints(projectSprints);
@@ -122,14 +121,10 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({
       if (scheduleId && !task) {
         try {
           const tasks = await SchedulesService.getTasksBySchedule(scheduleId);
-          const maxOrder = tasks.length > 0
-            ? Math.max(...tasks.map(t => t.order || 0))
-            : -1;
-          const nextOrder = maxOrder + 1;
+          
           const autoAssigneeId = currentUser && (currentUser.role === 'user' || currentUser.role === 'qa')
             ? parseInt(currentUser.id) 
             : 0;
-
           const todoStatusId = getStatusId(TaskStatusCode.TODO) || 1;
           setFormData({
             title: '',
@@ -138,7 +133,7 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({
             estimatedHours: 8,
             sprintId: null,
             statusId: todoStatusId,
-            order: nextOrder,
+            order: 0,
           });
         } catch (error) {
           const autoAssigneeId = currentUser && (currentUser.role === 'user' || currentUser.role === 'qa')
@@ -162,10 +157,10 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({
     const fetchExistingAttachments = async () => {
       if (task) {
         try {
-          const comments = await SchedulesService.getTaskComments(task.id);
-          // Filtrar apenas comentários que são arquivos anexados
-          const attachmentComments = comments.filter(comment => comment.fileName);
+          const commentsData = await SchedulesService.getTaskComments(task.id);
+          const attachmentComments = commentsData.filter(comment => comment.fileName);
           setExistingAttachments(attachmentComments);
+          setComments(commentsData);
         } catch (error) {
           console.error('Erro ao carregar anexos existentes:', error);
         }
@@ -187,13 +182,98 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({
       } else {
         fetchNextOrder();
         setExistingAttachments([]);
+        setComments([]);
       }
       setErrors({});
+      setNewComment('');
     }
   }, [isOpen, task, scheduleId, currentUser]);
 
   const canEditAssignee = () => {
     return currentUser && currentUser.role !== 'user' && currentUser.role !== 'qa';
+  };
+
+  const getInitials = (name: string): string => {
+    return name
+      .split(' ')
+      .map(part => part.charAt(0))
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
+  const formatDateTime = (dateString: string): string => {
+    return new Date(dateString).toLocaleString('pt-BR');
+  };
+
+  const handleAddComment = async () => {
+    if (!newComment.trim() || !task) return;
+
+    try {
+      const newCommentObj = await SchedulesService.createTaskComment(task.id, newComment);
+      setComments([newCommentObj, ...comments]);
+      setNewComment('');
+      toast.success('Comentário adicionado com sucesso');
+    } catch (error) {
+      toast.error('Erro ao adicionar comentário');
+    }
+  };
+
+  const removeComment = async (id: number) => {
+    try {
+      await SchedulesService.deleteTaskComment(id);
+      setComments(comments.filter(comment => comment.id !== id));
+      toast.success('Comentário removido com sucesso');
+    } catch (error) {
+      toast.error('Erro ao remover comentário');
+    }
+  };
+
+  const handleCommentFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file && task) {
+      try {
+        const fileComment = await SchedulesService.createTaskCommentWithFile(task.id, file);
+        setComments([fileComment, ...comments]);
+        toast.success('Arquivo anexado como comentário com sucesso');
+        if (commentFileInputRef.current) {
+          commentFileInputRef.current.value = '';
+        }
+      } catch (error) {
+        toast.error('Erro ao anexar arquivo como comentário');
+      }
+    }
+  };
+
+  const downloadFile = async (fileUrl: string, fileName: string) => {
+    try {
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+      const fullUrl = `${API_BASE_URL}${fileUrl}`;
+      
+      const response = await fetch(fullUrl, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to download file');
+      }
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      toast.success(`${fileName} baixado com sucesso`);
+    } catch (error) {
+      toast.error('Erro ao baixar arquivo');
+    }
   };
 
   const handleInputChange = (field: keyof FormData) => (
@@ -227,16 +307,13 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({
     if (!formData.title.trim()) {
       newErrors.title = 'Título é obrigatório';
     }
-
     if (!formData.assigneeId || formData.assigneeId === 0) {
       newErrors.assigneeId = 'Selecione um responsável';
     }
-
     if (formData.estimatedHours <= 0) {
       newErrors.estimatedHours = 'Horas estimadas devem ser maior que zero';
     }
 
-    // Validação específica para status "completed" - impede conclusão sem horas lançadas
     const completedStatusId = getStatusId(TaskStatusCode.COMPLETED);
     if (completedStatusId && formData.statusId === completedStatusId && isEditing && task) {
       const actualHours = task.actualHours || 0;
@@ -244,7 +321,6 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({
         newErrors.statusId = 'Não é possível marcar a atividade como concluída sem lançar horas. Registre as horas trabalhadas antes de finalizar a atividade.';
       }
     }
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -254,8 +330,6 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({
     if (files.length > 0) {
       setUploadedFiles(prev => [...prev, ...files]);
       toast.success(`${files.length} arquivo(s) selecionado(s) para anexar`);
-      
-      // Limpar o input para permitir selecionar o mesmo arquivo novamente
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -302,7 +376,6 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({
   const handleDeleteAttachment = async (attachment: TaskComment) => {
     try {
       await SchedulesService.deleteTaskComment(attachment.id);
-      // Atualizar a lista de anexos removendo o item excluído
       setExistingAttachments(prev => prev.filter(item => item.id !== attachment.id));
       toast.success('Arquivo excluído com sucesso');
     } catch (error) {
@@ -323,7 +396,6 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({
       return;
     }
 
-    // Validação adicional para status completed
     const completedStatusId = getStatusId(TaskStatusCode.COMPLETED);
     if (completedStatusId && formData.statusId === completedStatusId && isEditing && task) {
       const actualHours = task.actualHours || 0;
@@ -336,23 +408,25 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({
     setLoading(true);
 
     try {
+      let finalOrder: number | undefined = formData.order;
+
+      const isBacklogValue = formData.sprintId === null || formData.sprintId === undefined ? true : false;
+
       const data: CreateScheduleTaskDto | UpdateScheduleTaskDto = {
         title: formData.title.trim(),
         description: formData.description.trim() || undefined,
         assigneeId: formData.assigneeId,
         estimatedHours: formData.estimatedHours,
-        sprintId: formData.sprintId || undefined,
+        sprintId: formData.sprintId ?? null,
         statusId: formData.statusId,
-        order: formData.order,
-        // Se há sprint selecionada, vai para a sprint. Senão, vai para o backlog
-        isBacklog: !isEditing ? !formData.sprintId : undefined,
+        order: finalOrder,
+        isBacklog: isBacklogValue,
       };
 
       let taskId: number;
       let estimatedHoursChanged = false;
       
       if (isEditing) {
-        // Verificar se as horas estimadas mudaram
         estimatedHoursChanged = task && Number(task.estimatedHours) !== Number(formData.estimatedHours);
         
         await SchedulesService.updateTask(task.id, data);
@@ -370,11 +444,9 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({
           ? `na sprint "${sprints.find(s => s.id === formData.sprintId)?.name || 'selecionada'}"` 
           : 'no backlog';
         toast.success(`Atividade criada ${location} com sucesso`);
-        // Para novas atividades, sempre pode necessitar recálculo se não for a primeira
         estimatedHoursChanged = true;
       }
 
-      // Fazer upload dos arquivos anexados
       if (uploadedFiles.length > 0) {
         try {
           for (const file of uploadedFiles) {
@@ -386,15 +458,10 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({
         }
       }
 
-      // Limpar arquivos após sucesso
       setUploadedFiles([]);
-      
-      // Verificar se a atividade foi marcada como concluída
       const completedStatusId = getStatusId(TaskStatusCode.COMPLETED);
       const taskWasCompleted = completedStatusId && formData.statusId === completedStatusId;
-      
       onSave(taskWasCompleted, estimatedHoursChanged);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       const errorMessage =
         error?.response?.data?.message || error?.message || 'Erro ao salvar atividade';
@@ -406,8 +473,8 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({
 
   const handleClose = () => {
     if (!loading) {
-      // Limpar arquivos selecionados ao fechar
       setUploadedFiles([]);
+      setNewComment('');
       onClose();
     }
   };
@@ -622,7 +689,7 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({
                   <SelectValue placeholder="Selecione uma sprint" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">Sem sprint (desvincular)</SelectItem>
+                  <SelectItem value="none">Sem sprint (Backlog)</SelectItem>
                   {sprints.map((sprint) => (
                     <SelectItem key={sprint.id} value={sprint.id.toString()}>
                       {sprint.name}
@@ -673,9 +740,92 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({
                 value={formData.order}
                 onChange={handleInputChange('order')}
                 disabled={loading}
+                placeholder="0 para Sprint, 99 para Backlog"
               />
             </div>
           </div>
+
+          {/* Comentários - apenas para edição */}
+          {isEditing && task && (
+            <div className="space-y-3">
+              <h3 className="text-sm font-medium">Comentários</h3>
+              
+              {/* Lista de comentários */}
+              <div className="space-y-3 max-h-60 overflow-y-auto">
+                {comments.map((comment) => (
+                  <div key={comment.id} className="bg-gray-50 p-3 rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <Avatar className="h-6 w-6">
+                          <AvatarFallback className="text-xs">
+                            {getInitials(comment.user.name)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="text-sm font-medium">{comment.user.name}</span>
+                        <span className="text-xs text-gray-500">
+                          {formatDateTime(comment.createdAt)}
+                        </span>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeComment(comment.id)}
+                        disabled={loading}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    
+                    {/* Se for um arquivo */}
+                    {comment.fileName ? (
+                      <div className="flex items-center gap-2 text-sm">
+                        <Paperclip className="h-4 w-4 text-gray-500" />
+                        <span className="font-medium">{comment.fileName}</span>
+                        <span className="text-xs text-gray-500">
+                          ({comment.mimeType}) - {comment.fileSize ? (comment.fileSize / (1024 * 1024)).toFixed(1) : '0'} MB
+                        </span>
+                        {comment.fileUrl && (
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={() => downloadFile(comment.fileUrl!, comment.fileName!)}
+                          >
+                            <Download className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-sm">{comment.text}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Novo comentário */}
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <Input
+                    value={newComment}
+                    onChange={(e) => setNewComment(e.target.value)}
+                    placeholder="Adicione um comentário..."
+                    onKeyPress={(e) => e.key === 'Enter' && handleAddComment()}
+                    disabled={loading}
+                  />
+                  <Button onClick={handleAddComment} size="sm" disabled={loading || !newComment.trim()}>
+                    <Send className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+              
+              <input
+                ref={commentFileInputRef}
+                type="file"
+                className="hidden"
+                onChange={handleCommentFileUpload}
+                accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.gif,.mp4,.mov,.zip,.rar"
+              />
+            </div>
+          )}
 
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
             <p className="text-sm text-blue-800">
@@ -688,8 +838,8 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({
           {!isEditing && (
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
               <p className="text-sm text-gray-700">
-                <strong>📋 Localização:</strong> Esta atividade será criada no <strong>Backlog</strong>. 
-                Você pode movê-la para "Atividades" ou associar a uma Sprint depois.
+                <strong>📋 Localização:</strong> Se nenhuma Sprint for selecionada, a atividade será criada no <strong>Backlog</strong> (ordem 99). 
+                Se uma Sprint for selecionada, ela receberá a próxima ordem disponível nessa Sprint.
               </p>
             </div>
           )}

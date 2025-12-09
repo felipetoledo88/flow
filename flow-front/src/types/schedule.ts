@@ -70,6 +70,7 @@ export interface Project {
     name: string;
     email: string;
   };
+  endDate: Date
 }
 
 export interface TaskDependency {
@@ -147,11 +148,10 @@ export interface CreateScheduleDto {
   tasks?: CreateTaskDto[];
 }
 
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface UpdateScheduleDto extends Partial<CreateScheduleDto> {}
-
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface UpdateTaskDto extends Partial<CreateTaskDto> {}
+
+export interface UpdateScheduleTaskDto extends Partial<CreateTaskDto> {}
 
 export interface UpdateTaskHoursDto {
   actualHours: number;
@@ -199,3 +199,6 @@ export const DEPENDENCY_TYPE_LABELS: Record<DependencyType, string> = {
   [DependencyType.FINISH_TO_FINISH]: 'Término-Término',
   [DependencyType.START_TO_FINISH]: 'Início-Término',
 };
+
+// Alias para Task - usado em contextos de agendamento
+export type ScheduleTask = Task;
