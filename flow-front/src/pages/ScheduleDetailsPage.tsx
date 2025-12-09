@@ -666,11 +666,19 @@ const ScheduleDetailsPage = () => {
         }
       } else {
         if (schedule) {
-          const updatedSchedule = { ...schedule };
-          const taskToUpdate = updatedSchedule.tasks?.find(t => t.id === taskId);
-          if (taskToUpdate) {
-            taskToUpdate.statusId = statusId;
-          }
+          const newStatus = statuses.find(s => s.id === statusId);
+          const updatedSchedule = {
+            ...schedule,
+            tasks: schedule.tasks?.map(t =>
+              t.id === taskId
+                ? {
+                    ...t,
+                    statusId: statusId,
+                    status: newStatus || t.status
+                  }
+                : t
+            )
+          };
           setSchedule(updatedSchedule);
         }
       }

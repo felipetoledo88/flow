@@ -302,11 +302,16 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, projectId, onTaskStatu
   );
 
   // Sincronizar localTasks com as props tasks
+  // Usar JSON.stringify para comparar o conteúdo real das tasks
+  const tasksKey = React.useMemo(() => {
+    return JSON.stringify(tasks?.map(t => ({ id: t.id, statusId: t.status?.id, actualHours: t.actualHours })));
+  }, [tasks]);
+
   React.useEffect(() => {
     if (tasks) {
       setLocalTasks(tasks);
     }
-  }, [tasks]);
+  }, [tasksKey]);
 
   const filteredTasks = useMemo(() => {
     return localTasks?.filter(task => {

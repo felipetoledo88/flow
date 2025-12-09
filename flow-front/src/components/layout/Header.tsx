@@ -52,11 +52,11 @@ const Header = ({ onToggleSidebar }: HeaderProps) => {
       </div>
 
       <div className="flex items-center gap-2">
-        <Button 
-          variant="ghost" 
+        <Button
+          variant="ghost"
           size="sm"
           onClick={() => setIsChatOpen(true)}
-          title="Abrir Nexia"
+          title="Abrir Flow Chat"
           className="relative"
         >
           <Brain className="h-5 w-5" />
