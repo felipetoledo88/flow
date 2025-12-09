@@ -44,6 +44,8 @@ import { toast } from 'sonner';
 import { Loader2, Clock, AlertTriangle, TrendingUp, TrendingDown, History, MoreVertical, Edit, Trash2 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuth } from '@/hooks/use-auth';
+import { HoursInput } from '@/components/ui/hours-input';
+import { formatHoursToDisplay, formatHoursDiff } from '@/lib/time-utils';
 
 interface UpdateTaskHoursModalProps {
   isOpen: boolean;
@@ -134,11 +136,11 @@ const UpdateTaskHoursModal: React.FC<UpdateTaskHoursModalProps> = ({
       const wasCompleted = updatedTask.status?.code === 'completed';
       
       if (wasCompleted) {
-        toast.success(`${actualHours}h adicionadas. Total: ${newTotalHours}h. Atividade concluída!`, {
+        toast.success(`${formatHoursToDisplay(actualHours)} adicionadas. Total: ${formatHoursToDisplay(newTotalHours)}. Atividade concluída!`, {
           description: 'Datas serão recalculadas automaticamente.',
         });
       } else {
-        toast.success(`${actualHours}h adicionadas. Total: ${newTotalHours}h.`, {
+        toast.success(`${formatHoursToDisplay(actualHours)} adicionadas. Total: ${formatHoursToDisplay(newTotalHours)}.`, {
           description: 'Lançamento registrado com sucesso.',
         });
       }
@@ -270,34 +272,25 @@ const UpdateTaskHoursModal: React.FC<UpdateTaskHoursModalProps> = ({
           <div className="grid grid-cols-2 gap-4 p-4 bg-muted rounded-lg">
             <div>
               <p className="text-sm text-muted-foreground">Horas Estimadas</p>
-              <p className="text-lg font-semibold">{estimatedHours}h</p>
+              <p className="text-lg font-semibold">{formatHoursToDisplay(estimatedHours)}</p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Horas Lançadas</p>
-              <p className="text-lg font-semibold">{currentHours}h</p>
+              <p className="text-lg font-semibold">{formatHoursToDisplay(currentHours)}</p>
             </div>
           </div>
 
           {/* Hours Input */}
-          <div className="space-y-2">
-            <Label htmlFor="actualHours">Horas</Label>
-            <Input
-              id="actualHours"
-              type="number"
-              min="0"
-              step="0.5"
-              value={actualHours}
-              onChange={(e) => {
-                setActualHours(parseFloat(e.target.value) || 0);
-                setError('');
-              }}
-              disabled={loading}
-              className="text-lg"
-            />
-            {error && (
-              <p className="text-sm text-destructive">{error}</p>
-            )}
-          </div>
+          <HoursInput
+            label="Tempo a lançar"
+            value={actualHours}
+            onChange={(value) => {
+              setActualHours(value);
+              setError('');
+            }}
+            disabled={loading}
+            error={error}
+          />
 
           {/* Reason Input */}
           <div className="space-y-2">
@@ -343,23 +336,23 @@ const UpdateTaskHoursModal: React.FC<UpdateTaskHoursModalProps> = ({
                 <div className="flex items-center gap-2">
                   <TrendingUp className="h-4 w-4 text-blue-600" />
                   <span className="font-medium">
-                    +{actualHours}h serão adicionadas
+                    +{formatHoursToDisplay(actualHours)} serão adicionadas
                   </span>
                 </div>
-                
+
                 <div className="text-sm">
-                  <p><strong>Total atual:</strong> {currentHours}h</p>
-                  <p><strong>Novo total:</strong> {newTotalHours}h</p>
+                  <p><strong>Total atual:</strong> {formatHoursToDisplay(currentHours)}</p>
+                  <p><strong>Novo total:</strong> {formatHoursToDisplay(newTotalHours)}</p>
                 </div>
 
                 {isOverBudget ? (
                   <p className="text-sm text-orange-800">
-                    Atividade ultrapassará o estimado em {newTotalHours - estimatedHours}h.
+                    Atividade ultrapassará o estimado em {formatHoursToDisplay(newTotalHours - estimatedHours)}.
                   </p>
                 ) : (
                   <p className="text-sm text-blue-800">
                     {remainingHours > 0
-                      ? `Restarão ${remainingHours}h para concluir.`
+                      ? `Restarão ${formatHoursToDisplay(remainingHours)} para concluir.`
                       : 'Atividade ficará completa!'
                     }
                   </p>
@@ -444,7 +437,7 @@ const UpdateTaskHoursModal: React.FC<UpdateTaskHoursModalProps> = ({
                             <TrendingDown className="h-4 w-4 text-green-600" />
                           )}
                           <span className={`font-medium ${entry.hoursChanged > 0 ? 'text-orange-600' : 'text-green-600'}`}>
-                            {entry.hoursChanged > 0 ? '+' : ''}{entry.hoursChanged}h
+                            {formatHoursDiff(entry.hoursChanged)}
                           </span>
                           {canAccessHoursEntryOptions(entry) && (
                             <DropdownMenu>
@@ -495,17 +488,11 @@ const UpdateTaskHoursModal: React.FC<UpdateTaskHoursModalProps> = ({
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div>
-              <Label htmlFor="editHours">Horas do Lançamento *</Label>
-              <Input
-                id="editHours"
-                type="number"
-                min="0"
-                step="0.5"
-                value={editHours}
-                onChange={(e) => setEditHours(parseFloat(e.target.value) || 0)}
-              />
-            </div>
+            <HoursInput
+              label="Tempo do Lançamento"
+              value={editHours}
+              onChange={setEditHours}
+            />
             <div>
               <Label htmlFor="editComment">Comentário</Label>
               <Textarea

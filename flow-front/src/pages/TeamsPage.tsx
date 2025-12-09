@@ -39,6 +39,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
+import { formatHoursToDisplay } from '@/lib/time-utils';
 
 const TeamsPage = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -302,7 +303,7 @@ const TeamsPage = () => {
                                   {member.user.name}
                                 </p>
                                 <p className="text-xs text-muted-foreground">
-                                  {member.dailyWorkHours}h/dia
+                                  {formatHoursToDisplay(member.dailyWorkHours)}/dia
                                 </p>
                               </div>
                               <div className="text-right ml-2">

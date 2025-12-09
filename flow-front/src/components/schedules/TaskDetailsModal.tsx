@@ -77,6 +77,8 @@ import {
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { compressImage, isImageFile } from '@/lib/image-utils';
+import { HoursInput } from '@/components/ui/hours-input';
+import { formatHoursToDisplay, formatHoursDiff } from '@/lib/time-utils';
 
 interface TaskDetailsModalProps {
   isOpen: boolean;
@@ -97,7 +99,7 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
   const [description, setDescription] = useState(initialTask?.description || '');
   const [newComment, setNewComment] = useState('');
   const [comments, setComments] = useState<TaskComment[]>([]);
-  const [hours, setHours] = useState('');
+  const [hours, setHours] = useState(0);
   const [comment, setComment] = useState('');
   const [reason, setReason] = useState<TaskHoursReason | ''>('');
   const [isLoading, setIsLoading] = useState(false);
@@ -213,7 +215,7 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
   // Resetar campos do formulário quando o modal abrir ou a tarefa mudar
   React.useEffect(() => {
     if (isOpen) {
-      setHours('');
+      setHours(0);
       setComment('');
       setReason('');
       setNewComment('');
@@ -503,9 +505,9 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
   };
 
   const handleAddHours = async () => {
-    const hoursToAdd = parseFloat(hours);
+    const hoursToAdd = hours;
 
-    if (!hours || hoursToAdd <= 0) {
+    if (hoursToAdd <= 0) {
       toast({
         title: "Erro",
         description: "Por favor, insira um valor válido de horas.",
@@ -537,10 +539,10 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
 
       toast({
         title: "Horas lançadas",
-        description: `${hoursToAdd}h adicionadas com sucesso. Total: ${newTotalHours}h`,
+        description: `${formatHoursToDisplay(hoursToAdd)} adicionadas com sucesso. Total: ${formatHoursToDisplay(newTotalHours)}`,
       });
 
-      setHours('');
+      setHours(0);
       setComment('');
       setReason('');
 
@@ -906,7 +908,7 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
                               />
                             </div>
                             <span className="text-xs font-medium whitespace-nowrap">
-                              {Number(task.actualHours) || 0}h / {Number(task.estimatedHours) || 0}h
+                              {formatHoursToDisplay(task.actualHours)} / {formatHoursToDisplay(task.estimatedHours)}
                             </span>
                             {Number(task.actualHours) > Number(task.estimatedHours) && (
                               <AlertCircle className="h-4 w-4 text-orange-500 shrink-0" />
@@ -1230,15 +1232,13 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
                               ))}
                             </SelectContent>
                           </Select>
-                          <Input
-                            type="number"
-                            step="0.5"
-                            min="0"
-                            value={hours}
-                            onChange={(e) => setHours(e.target.value)}
-                            placeholder="Horas (ex: 2, 5, 8)"
-                            className="bg-white"
-                          />
+                          <div className="bg-white rounded-md p-2">
+                            <HoursInput
+                              value={hours}
+                              onChange={setHours}
+                              showLabel={false}
+                            />
+                          </div>
                           <Textarea
                             value={comment}
                             onChange={(e) => setComment(e.target.value)}
@@ -1248,7 +1248,7 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
                           />
                           <Button
                             onClick={handleAddHours}
-                            disabled={isLoading || !hours || !reason}
+                            disabled={isLoading || hours <= 0 || !reason}
                             className="w-full"
                           >
                             {isLoading ? (
@@ -1301,7 +1301,7 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
                                       <span className={`text-sm font-semibold ${
                                         entry.hoursChanged > 0 ? 'text-orange-600' : 'text-green-600'
                                       }`}>
-                                        {entry.hoursChanged > 0 ? '+' : ''}{entry.hoursChanged}h
+                                        {formatHoursDiff(entry.hoursChanged)}
                                       </span>
                                       {canAccessHoursEntryOptions(entry) && (
                                         <DropdownMenu>

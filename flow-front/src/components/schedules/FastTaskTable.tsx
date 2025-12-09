@@ -36,6 +36,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Sprint } from '@/types';
+import { formatHoursToDisplay } from '@/lib/time-utils';
 
 interface FastTaskRowProps {
   task: ScheduleTask;
@@ -217,7 +218,7 @@ const FastTaskRow = memo<FastTaskRowProps>(({
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium">
-                {task.actualHours}h / {task.estimatedHours}h
+                {formatHoursToDisplay(task.actualHours)} / {formatHoursToDisplay(task.estimatedHours)}
               </span>
               {Number(task.actualHours) > Number(task.estimatedHours) && (
                 <AlertCircle className="h-4 w-4 text-orange-500" />

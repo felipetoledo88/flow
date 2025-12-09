@@ -14,6 +14,7 @@ import TaskDetailsModal from './TaskDetailsModal';
 import { toast } from '@/hooks/use-toast';
 import { toast as sonnerToast } from 'sonner';
 import { getStatusColorsFromEntity } from '@/utils/status-colors';
+import { formatHoursToDisplay } from '@/lib/time-utils';
 import {
   DndContext,
   DragEndEvent,
@@ -140,7 +141,7 @@ const TaskCard: React.FC<TaskCardProps> = React.memo(({ task, onTaskClick }) => 
         <div className="flex items-center justify-between text-xs text-gray-500 mb-1.5">
           <div className="flex items-center gap-1.5">
             <Clock className="h-3 w-3" />
-            <span className="font-medium">{task.actualHours}h / {task.estimatedHours}h</span>
+            <span className="font-medium">{formatHoursToDisplay(task.actualHours)} / {formatHoursToDisplay(task.estimatedHours)}</span>
             {Number(task.actualHours) > Number(task.estimatedHours) && (
               <AlertCircle className="h-3 w-3 text-orange-500" />
             )}

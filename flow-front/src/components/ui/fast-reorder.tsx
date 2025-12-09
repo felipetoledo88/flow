@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef, useMemo } from 'react';
+import { formatHoursToDisplay } from '@/lib/time-utils';
 
 interface FastReorderContextProps {
   children: React.ReactNode;
@@ -203,7 +204,7 @@ export const FastReorderProvider: React.FC<FastReorderContextProps> = ({
               
               <div className="flex items-center gap-1">
                 <span className="text-gray-500">⏱️</span>
-                <span>{dragState.draggedTaskInfo.estimatedHours}h</span>
+                <span>{formatHoursToDisplay(dragState.draggedTaskInfo.estimatedHours)}</span>
               </div>
             </div>
           </div>

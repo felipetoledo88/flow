@@ -87,6 +87,7 @@ import { useDashboardData } from '@/hooks/useDashboardData';
 import { useDashboardCalculations } from '@/hooks/useDashboardCalculations';
 import { useProjectStore } from '@/stores/project/project.store';
 import { getStatusColorsFromEntity } from '@/utils/status-colors';
+import { formatHoursToDisplay } from '@/lib/time-utils';
 
 const ScheduleDetailsPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -1469,10 +1470,10 @@ const ScheduleDetailsPage = () => {
                       </CardHeader>
                       <CardContent>
                         <p className="text-lg font-semibold">
-                          {(schedule?.tasks || []).filter(t => !t.isBacklog).reduce((sum, t) => sum + Number(t.actualHours), 0)}h
+                          {formatHoursToDisplay((schedule?.tasks || []).filter(t => !t.isBacklog).reduce((sum, t) => sum + Number(t.actualHours), 0))}
                         </p>
                         <p className="text-sm text-muted-foreground">
-                          de {(schedule?.tasks || []).filter(t => !t.isBacklog).reduce((sum, t) => sum + Number(t.estimatedHours), 0)}h estimadas
+                          de {formatHoursToDisplay((schedule?.tasks || []).filter(t => !t.isBacklog).reduce((sum, t) => sum + Number(t.estimatedHours), 0))} estimadas
                         </p>
                       </CardContent>
                     </Card>

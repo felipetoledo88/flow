@@ -26,6 +26,7 @@ import { toast } from 'sonner';
 import { Loader2, Paperclip, Download, FileIcon, Trash2, Send, X } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useTaskStatus } from '@/hooks';
+import { HoursInput } from '@/components/ui/hours-input';
 
 interface TaskFormModalProps {
   isOpen: boolean;
@@ -661,21 +662,14 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({
 
           <div className="grid grid-cols-2 gap-4">
             {/* Estimated Hours */}
-            <div className="space-y-2">
-              <Label htmlFor="estimatedHours">Horas Estimadas *</Label>
-              <Input
-                id="estimatedHours"
-                type="number"
-                min="0.5"
-                step="0.5"
-                value={formData.estimatedHours}
-                onChange={handleInputChange('estimatedHours')}
-                disabled={loading}
-              />
-              {errors.estimatedHours && (
-                <p className="text-sm text-destructive">{errors.estimatedHours}</p>
-              )}
-            </div>
+            <HoursInput
+              label="Tempo Estimado *"
+              value={formData.estimatedHours}
+              onChange={(value) => setFormData(prev => ({ ...prev, estimatedHours: value }))}
+              disabled={loading}
+              error={errors.estimatedHours}
+              minHours={0}
+            />
 
             {/* Sprint */}
             <div className="space-y-2">
