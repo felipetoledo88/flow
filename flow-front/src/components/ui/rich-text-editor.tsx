@@ -1,4 +1,4 @@
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useRef, useEffect } from 'react';
 import { useEditor, EditorContent, Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
@@ -330,6 +330,19 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
       onChange?.(editor.getHTML());
     },
   });
+
+  // Sincronizar conteúdo quando o prop content mudar externamente (ex: após limpar ou recarregar)
+  useEffect(() => {
+    if (editor && content !== editor.getHTML()) {
+      // Limpar se for vazio
+      if (content === '' || content === '<p></p>') {
+        editor.commands.clearContent();
+      } else {
+        // Atualizar com o novo conteúdo
+        editor.commands.setContent(content);
+      }
+    }
+  }, [content, editor]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {

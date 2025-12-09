@@ -5,6 +5,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  ResizableDialog,
+  ResizableDialogContent,
+  ResizableDialogHeader,
+  ResizableDialogTitle,
+} from '@/components/ui/resizable-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -35,6 +41,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { RichTextEditor, RichTextViewer, AttachedFile } from '@/components/ui/rich-text-editor';
@@ -45,7 +56,6 @@ import {
   Clock,
   User,
   Calendar,
-  Plus,
   Paperclip,
   Download,
   X,
@@ -57,10 +67,16 @@ import {
   Edit,
   Trash2,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  ChevronDown,
+  ChevronRight,
+  MessageSquare,
+  FileText,
+  GripHorizontal,
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
+import { compressImage, isImageFile } from '@/lib/image-utils';
 
 interface TaskDetailsModalProps {
   isOpen: boolean;
@@ -73,10 +89,12 @@ interface TaskDetailsModalProps {
 const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
   isOpen,
   onClose,
-  task,
+  task: initialTask,
   onUpdateTask
 }) => {
-  const [description, setDescription] = useState(task?.description || '');
+  // Estado local da tarefa para manter dados atualizados
+  const [currentTask, setCurrentTask] = useState<Task | null>(initialTask);
+  const [description, setDescription] = useState(initialTask?.description || '');
   const [newComment, setNewComment] = useState('');
   const [comments, setComments] = useState<TaskComment[]>([]);
   const [hours, setHours] = useState('');
@@ -85,6 +103,7 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [hoursHistory, setHoursHistory] = useState<TaskHoursHistory[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [loadingTask, setLoadingTask] = useState(false);
 
   // Estados para edição e exclusão de histórico
   const [editingEntry, setEditingEntry] = useState<TaskHoursHistory | null>(null);
@@ -93,7 +112,7 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
 
   // Estados para edição do título
   const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [title, setTitle] = useState(task?.title || '');
+  const [title, setTitle] = useState(initialTask?.title || '');
   const [entryToDelete, setEntryToDelete] = useState<TaskHoursHistory | null>(null);
   const [editHours, setEditHours] = useState<number>(0);
   const [editComment, setEditComment] = useState<string>('');
@@ -110,17 +129,63 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
   const [loadingAttachments, setLoadingAttachments] = useState(false);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
 
+  // Estados para seções colapsáveis
+  const [descriptionOpen, setDescriptionOpen] = useState(true);
+  const [commentsOpen, setCommentsOpen] = useState(true);
+  const [attachmentsOpen, setAttachmentsOpen] = useState(true);
+
   // Hook para autenticação
   const { user: currentUser } = useAuth();
 
-  // Sincronizar título com a tarefa atual
+  // Função para recarregar dados da tarefa do servidor
+  const reloadTask = async () => {
+    if (!initialTask) return;
+
+    setLoadingTask(true);
+    try {
+      const freshTask = await SchedulesService.getTask(initialTask.id);
+      // Mesclar dados atualizados mantendo relações que podem não vir na API
+      const updatedTask = {
+        ...initialTask,
+        ...freshTask,
+        assignee: freshTask.assignee || initialTask.assignee,
+        status: freshTask.status || initialTask.status,
+      };
+      setCurrentTask(updatedTask);
+      setTitle(updatedTask.title);
+      setDescription(updatedTask.description || '');
+
+      // Notificar componente pai
+      if (onUpdateTask) {
+        onUpdateTask(updatedTask);
+      }
+    } catch (error) {
+      console.error('Error reloading task:', error);
+      // Em caso de erro, usa os dados iniciais
+      setCurrentTask(initialTask);
+      setTitle(initialTask.title);
+      setDescription(initialTask.description || '');
+    } finally {
+      setLoadingTask(false);
+    }
+  };
+
+  // Atualizar currentTask quando initialTask mudar
   useEffect(() => {
-    if (task) {
-      setTitle(task.title);
-      setDescription(task.description || '');
+    if (initialTask) {
+      setCurrentTask(initialTask);
+      setTitle(initialTask.title);
+      setDescription(initialTask.description || '');
       setIsEditingTitle(false);
     }
-  }, [task]);
+  }, [initialTask]);
+
+  // Recarregar dados da tarefa quando o modal abrir
+  useEffect(() => {
+    if (isOpen && initialTask) {
+      reloadTask();
+    }
+  }, [isOpen, initialTask?.id]);
 
   // Função para verificar se o usuário pode editar/excluir entrada de horas
   const canAccessHoursEntryOptions = (entry: TaskHoursHistory) => {
@@ -131,20 +196,19 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
   };
 
   // Função para verificar se o usuário pode editar/excluir comentário
-  const canEditComment = (comment: TaskComment) => {
+  const canEditComment = (commentItem: TaskComment) => {
     if (!currentUser) return false;
-    // Só pode editar/excluir comentários próprios
-    return comment.user.id === parseInt(currentUser.id);
+    return commentItem.user.id === parseInt(currentUser.id);
   };
 
   // Carregar histórico, comentários e anexos quando o modal abrir
   React.useEffect(() => {
-    if (isOpen && task) {
+    if (isOpen && currentTask) {
       loadHoursHistory();
       loadComments();
       loadAttachments();
     }
-  }, [isOpen, task]);
+  }, [isOpen, currentTask?.id]);
 
   // Resetar campos do formulário quando o modal abrir ou a tarefa mudar
   React.useEffect(() => {
@@ -154,14 +218,10 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
       setReason('');
       setNewComment('');
     }
-  }, [isOpen, task]);
+  }, [isOpen, currentTask?.id]);
 
-  // Atualizar descrição quando a task mudar
-  React.useEffect(() => {
-    if (task) {
-      setDescription(task.description || '');
-    }
-  }, [task]);
+  // Usar currentTask como task para o resto do componente
+  const task = currentTask;
 
   if (!task) return null;
 
@@ -178,7 +238,7 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
   // Carregar histórico real de horas
   const loadHoursHistory = async () => {
     if (!task) return;
-    
+
     setLoadingHistory(true);
     try {
       const historyData = await SchedulesService.getTaskHoursHistory(task.id);
@@ -231,7 +291,18 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
 
     setIsLoading(true);
     try {
-      const newAttachment = await SchedulesService.createTaskAttachment(task.id, file);
+      // Comprimir se for imagem
+      let fileToUpload = file;
+      if (isImageFile(file)) {
+        fileToUpload = await compressImage(file, {
+          maxWidth: 1920,
+          maxHeight: 1080,
+          quality: 0.8,
+          maxSizeKB: 500,
+        });
+      }
+
+      const newAttachment = await SchedulesService.createTaskAttachment(task.id, fileToUpload);
       setAttachments([newAttachment, ...attachments]);
       toast({
         title: "Anexo adicionado",
@@ -277,10 +348,20 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
     return attachment.userId === parseInt(currentUser.id);
   };
 
-  // Upload de imagem inline para o editor
+  // Upload de imagem inline para o editor (com compressão)
   const handleImageUpload = async (file: File): Promise<string> => {
     try {
-      const url = await SchedulesService.uploadImage(file);
+      // Comprimir imagem antes do upload
+      let fileToUpload = file;
+      if (isImageFile(file)) {
+        fileToUpload = await compressImage(file, {
+          maxWidth: 1920,
+          maxHeight: 1080,
+          quality: 0.8,
+          maxSizeKB: 500,
+        });
+      }
+      const url = await SchedulesService.uploadImage(fileToUpload);
       return url;
     } catch (error) {
       toast({
@@ -292,11 +373,28 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
     }
   };
 
-  // Anexar arquivo no comentário
+  // Anexar arquivo no comentário (com compressão para imagens)
   const handleCommentFileAttach = async (file: File) => {
+    let fileToAttach = file;
+
+    // Comprimir se for imagem
+    if (isImageFile(file)) {
+      try {
+        fileToAttach = await compressImage(file, {
+          maxWidth: 1920,
+          maxHeight: 1080,
+          quality: 0.8,
+          maxSizeKB: 500,
+        });
+      } catch (error) {
+        console.error('Error compressing image:', error);
+        // Se falhar a compressão, usa o arquivo original
+      }
+    }
+
     const newAttachedFile: AttachedFile = {
-      file,
-      preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined,
+      file: fileToAttach,
+      preview: fileToAttach.type.startsWith('image/') ? URL.createObjectURL(fileToAttach) : undefined,
     };
     setCommentAttachedFiles(prev => [...prev, newAttachedFile]);
   };
@@ -334,7 +432,7 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
   const getProgressColor = () => {
     const actualHours = Number(task.actualHours) || 0;
     const estimatedHours = Number(task.estimatedHours) || 0;
-    
+
     if (actualHours > estimatedHours) return 'bg-orange-500';
     return 'bg-blue-500';
   };
@@ -342,7 +440,7 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
   const getProgressPercentage = () => {
     const actualHours = Number(task.actualHours) || 0;
     const estimatedHours = Number(task.estimatedHours) || 0;
-    
+
     if (estimatedHours === 0) return 0;
     return Math.min((actualHours / estimatedHours) * 100, 100);
   };
@@ -356,7 +454,7 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
       if (onUpdateTask) {
         onUpdateTask({ ...task, description });
       }
-      
+
       toast({
         title: "Descrição atualizada",
         description: "A descrição da tarefa foi atualizada com sucesso.",
@@ -381,9 +479,9 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
       if (onUpdateTask) {
         onUpdateTask({ ...task, title: title.trim() });
       }
-      
+
       setIsEditingTitle(false);
-      
+
       toast({
         title: "Título atualizado",
         description: "O título da tarefa foi atualizado com sucesso.",
@@ -406,7 +504,7 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
 
   const handleAddHours = async () => {
     const hoursToAdd = parseFloat(hours);
-    
+
     if (!hours || hoursToAdd <= 0) {
       toast({
         title: "Erro",
@@ -427,37 +525,31 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
 
     setIsLoading(true);
     try {
-      // Calcular o novo total de horas
       const newTotalHours = Number(task.actualHours) + hoursToAdd;
-      
-      // Preparar dados para atualização
+
       const updateData: UpdateTaskHoursDto = {
         actualHours: newTotalHours,
         comment: comment || undefined,
         reason: reason,
       };
 
-      // Atualizar as horas na tarefa
       await SchedulesService.updateTaskHours(task.id, updateData);
-      
+
       toast({
         title: "Horas lançadas",
         description: `${hoursToAdd}h adicionadas com sucesso. Total: ${newTotalHours}h`,
       });
-      
-      // Limpar os campos
+
       setHours('');
       setComment('');
       setReason('');
-      
-      // Recarregar o histórico para mostrar a nova entrada
+
       await loadHoursHistory();
-      
-      // Notificar componente pai se houver callback
+
       if (onUpdateTask) {
         onUpdateTask({ ...task, actualHours: newTotalHours });
       }
-      
+
     } catch (error: any) {
       const errorMessage = error?.response?.data?.message || error?.message || 'Não foi possível lançar as horas.';
       toast({
@@ -471,7 +563,6 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
   };
 
   const handleSubmitComment = async () => {
-    // Verifica se tem conteúdo (texto com mais que tags vazias ou arquivos)
     const hasContent = newComment && newComment.replace(/<[^>]*>/g, '').trim().length > 0;
     const hasFiles = commentAttachedFiles.length > 0;
 
@@ -481,7 +572,6 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
     try {
       const newComments: TaskComment[] = [];
 
-      // Se tem arquivos, envia cada um como comentário separado com o texto no primeiro
       if (hasFiles) {
         for (let i = 0; i < commentAttachedFiles.length; i++) {
           const file = commentAttachedFiles[i].file;
@@ -499,7 +589,6 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
           description: `${commentAttachedFiles.length} arquivo(s) anexado(s) com sucesso.`,
         });
       } else if (hasContent) {
-        // Envia apenas texto rico (pode conter imagens inline)
         const commentObj = await SchedulesService.createTaskComment(task.id, newComment);
         newComments.push(commentObj);
         toast({
@@ -510,7 +599,6 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
 
       setComments([...newComments.reverse(), ...comments]);
       setNewComment('');
-      // Limpar arquivos anexados
       commentAttachedFiles.forEach(f => {
         if (f.preview) URL.revokeObjectURL(f.preview);
       });
@@ -527,7 +615,6 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
     }
   };
 
-  // Funções para edição de comentário
   const startEditingComment = (comment: TaskComment) => {
     setEditingCommentId(comment.id);
     setEditingCommentText(comment.text || '');
@@ -587,17 +674,17 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
     try {
       const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
       const fullUrl = `${API_BASE_URL}${fileUrl}`;
-      
+
       const response = await fetch(fullUrl, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
         },
       });
-      
+
       if (!response.ok) {
         throw new Error('Failed to download file');
       }
-      
+
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -607,7 +694,7 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
-      
+
       toast({
         title: "Download concluído",
         description: `${fileName} foi baixado com sucesso.`,
@@ -621,7 +708,6 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
     }
   };
 
-  // Funções de edição e exclusão de histórico de horas
   const handleEditEntry = (entry: TaskHoursHistory) => {
     setEditingEntry(entry);
     const hours = entry.hoursChanged % 1 === 0 ? Math.floor(entry.hoursChanged) : entry.hoursChanged;
@@ -641,23 +727,20 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
     try {
       setIsLoading(true);
       const newTotalHours = Number(editingEntry.previousHours) + Number(editHours);
-      
-      await SchedulesService.updateTaskHoursHistory(editingEntry.id, { 
-        newHours: newTotalHours, 
-        comment: editComment 
+
+      await SchedulesService.updateTaskHoursHistory(editingEntry.id, {
+        newHours: newTotalHours,
+        comment: editComment
       });
-      
+
       toast({
         title: "Histórico atualizado",
         description: "O lançamento foi atualizado com sucesso.",
       });
-      
-      // Recarregar histórico
+
       await loadHoursHistory();
-      
-      // Atualizar tarefa localmente se callback fornecido
+
       if (onUpdateTask) {
-        // Calcular o novo total de horas baseado no histórico atual
         const updatedHistory = await SchedulesService.getTaskHoursHistory(task.id);
         const newActualHours = updatedHistory.reduce((total, entry) => {
           const hoursChanged = Number(entry.hoursChanged) || 0;
@@ -666,7 +749,7 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
         const updatedTask = { ...task, actualHours: Math.max(0, newActualHours) };
         onUpdateTask(updatedTask);
       }
-      
+
       setEditModalOpen(false);
       setEditingEntry(null);
     } catch (error) {
@@ -686,12 +769,12 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
     try {
       setIsLoading(true);
       await SchedulesService.deleteTaskHoursHistory(entryToDelete.id);
-      
+
       toast({
         title: "Histórico excluído",
         description: "O lançamento foi excluído com sucesso.",
       });
-      
+
       await loadHoursHistory();
       if (onUpdateTask) {
         const updatedHistory = await SchedulesService.getTaskHoursHistory(task.id);
@@ -702,7 +785,7 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
         const updatedTask = { ...task, actualHours: Math.max(0, newActualHours) };
         onUpdateTask(updatedTask);
       }
-      
+
       setDeleteDialogOpen(false);
       setEntryToDelete(null);
     } catch (error) {
@@ -717,455 +800,553 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-7xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-3">
-            {isEditingTitle ? (
-              <div className="flex items-center gap-2 flex-1">
-                <Input
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="text-lg font-semibold"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleSaveTitle();
-                    if (e.key === 'Escape') handleCancelTitleEdit();
-                  }}
-                  autoFocus
-                />
-                <Button
-                  onClick={handleSaveTitle}
-                  disabled={isLoading || !title.trim()}
-                  size="sm"
-                  variant="default"
-                >
-                  <Save className="h-4 w-4" />
-                </Button>
-                <Button
-                  onClick={handleCancelTitleEdit}
-                  size="sm"
-                  variant="outline"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 flex-1">
-                <span className="text-lg font-semibold">{task.title}</span>
-                <Button
-                  onClick={() => setIsEditingTitle(true)}
-                  size="sm"
-                  variant="ghost"
-                  className="h-8 w-8 p-0"
-                >
-                  <Edit className="h-4 w-4" />
-                </Button>
-              </div>
-            )}
-            <Badge variant="outline">#{task.id}</Badge>
-          </DialogTitle>
-        </DialogHeader>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Coluna Principal */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Descrição */}
-            <div>
-              <label className="text-sm font-medium mb-2 block">Descrição</label>
-              <RichTextEditor
-                content={description}
-                onChange={setDescription}
-                placeholder="Descreva os detalhes da tarefa..."
-                minHeight="120px"
-                maxHeight="300px"
-                onImageUpload={handleImageUpload}
-                onFileAttach={async (file) => {
-                  await handleAttachmentUpload({ target: { files: [file] } } as any);
-                }}
-                showToolbar={true}
-              />
-              <div className="flex items-center gap-2 mt-2">
-                <Button
-                  onClick={handleSaveDescription}
-                  disabled={isLoading}
-                  size="sm"
-                >
-                  {isLoading ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Save className="h-4 w-4 mr-2" />
-                  )}
-                  Salvar Descrição
-                </Button>
-              </div>
-
-              {/* Lista de anexos */}
-              {attachments.length > 0 && (
-                <div className="mt-3 space-y-2">
-                  <label className="text-xs font-medium text-gray-500">Anexos da atividade</label>
-                  <div className="space-y-2">
-                    {attachments.map((attachment) => (
-                      <div key={attachment.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
-                        {attachment.mimeType?.startsWith('image/') && (
-                          <img
-                            src={`${import.meta.env.VITE_API_BASE_URL}${attachment.fileUrl}`}
-                            alt={attachment.fileName}
-                            className="h-10 w-10 object-cover rounded cursor-pointer"
-                            onClick={() => downloadFile(attachment.fileUrl, attachment.fileName)}
-                          />
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{attachment.fileName}</p>
-                          <p className="text-xs text-gray-500">
-                            {attachment.fileSize ? (attachment.fileSize / (1024 * 1024)).toFixed(2) : '0'} MB
-                          </p>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => downloadFile(attachment.fileUrl, attachment.fileName)}
-                        >
-                          <Download className="h-4 w-4" />
-                        </Button>
-                        {canDeleteAttachment(attachment) && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => removeAttachment(attachment.id)}
-                            disabled={isLoading}
-                          >
-                            <Trash2 className="h-4 w-4 text-red-500" />
-                          </Button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+    <ResizableDialog open={isOpen} onOpenChange={onClose}>
+      <ResizableDialogContent
+        minWidth={800}
+        minHeight={500}
+        defaultWidth={1200}
+        defaultHeight={750}
+      >
+        {/* Header arrastável */}
+        <ResizableDialogHeader className="cursor-grab active:cursor-grabbing select-none">
+          <div className="flex items-center justify-between pr-8">
+            <div className="flex items-center gap-3 flex-1">
+              <GripHorizontal className="h-4 w-4 text-gray-400" />
+              {isEditingTitle ? (
+                <div className="flex items-center gap-2 flex-1">
+                  <Input
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    className="text-lg font-semibold"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleSaveTitle();
+                      if (e.key === 'Escape') handleCancelTitleEdit();
+                    }}
+                    autoFocus
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <Button
+                    onClick={handleSaveTitle}
+                    disabled={isLoading || !title.trim()}
+                    size="sm"
+                    variant="default"
+                  >
+                    <Save className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    onClick={handleCancelTitleEdit}
+                    size="sm"
+                    variant="outline"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 flex-1">
+                  <ResizableDialogTitle className="text-lg font-semibold truncate max-w-[600px]">
+                    {task.title}
+                  </ResizableDialogTitle>
+                  <Button
+                    onClick={() => setIsEditingTitle(true)}
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 w-8 p-0 shrink-0"
+                  >
+                    <Edit className="h-4 w-4" />
+                  </Button>
                 </div>
               )}
-
-              <input
-                ref={attachmentInputRef}
-                type="file"
-                className="hidden"
-                onChange={handleAttachmentUpload}
-              />
-            </div>
-
-            {/* Comentários */}
-            <div>
-              <h3 className="text-sm font-medium mb-3">Comentários e Anexos</h3>
-              
-              {/* Lista de comentários */}
-              <div className="space-y-3 mb-4 max-h-60 overflow-y-auto">
-                {comments.map((comment) => (
-                  <div key={comment.id} className="bg-gray-50 p-3 rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <Avatar className="h-6 w-6">
-                          <AvatarFallback className="text-xs">
-                            {getInitials(comment.user.name)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <span className="text-sm font-medium">{comment.user.name}</span>
-                        <span className="text-xs text-gray-500">
-                          {formatDateTime(comment.createdAt)}
-                        </span>
-                      </div>
-                      {canEditComment(comment) && (
-                        <div className="flex items-center gap-1">
-                          {!comment.fileName && editingCommentId !== comment.id && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => startEditingComment(comment)}
-                              disabled={isLoading}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => removeComment(comment.id)}
-                            disabled={isLoading}
-                          >
-                            <Trash2 className="h-4 w-4 text-red-500" />
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Se for um arquivo */}
-                    {comment.fileName ? (
-                      <div className="space-y-2">
-                        {/* Texto do comentário (se diferente do nome do arquivo) */}
-                        {comment.text && comment.text !== comment.fileName && (
-                          <RichTextViewer content={comment.text} className="text-sm" />
-                        )}
-                        {/* Preview de imagem se for imagem */}
-                        {comment.mimeType?.startsWith('image/') && comment.fileUrl && (
-                          <div className="relative max-w-xs">
-                            <img
-                              src={`${import.meta.env.VITE_API_BASE_URL}${comment.fileUrl}`}
-                              alt={comment.fileName}
-                              className="rounded-lg max-h-40 object-contain cursor-pointer hover:opacity-90"
-                              onClick={() => downloadFile(comment.fileUrl!, comment.fileName!)}
-                            />
-                          </div>
-                        )}
-                        <div className="flex items-center gap-2 text-sm">
-                          <Paperclip className="h-4 w-4 text-gray-500" />
-                          <span className="font-medium">{comment.fileName}</span>
-                          <span className="text-xs text-gray-500">
-                            ({comment.mimeType}) - {comment.fileSize ? (comment.fileSize / (1024 * 1024)).toFixed(2) : '0'} MB
-                          </span>
-                          {comment.fileUrl && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => downloadFile(comment.fileUrl!, comment.fileName!)}
-                            >
-                              <Download className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    ) : editingCommentId === comment.id ? (
-                      <div className="space-y-2">
-                        <RichTextEditor
-                          content={editingCommentText}
-                          onChange={setEditingCommentText}
-                          placeholder="Editar comentário..."
-                          minHeight="60px"
-                          maxHeight="150px"
-                          onImageUpload={handleImageUpload}
-                          showToolbar={true}
-                        />
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            onClick={saveEditedComment}
-                            disabled={isLoading || !editingCommentText.replace(/<[^>]*>/g, '').trim()}
-                          >
-                            <Save className="h-4 w-4 mr-1" />
-                            Salvar
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={cancelEditingComment}
-                            disabled={isLoading}
-                          >
-                            Cancelar
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <RichTextViewer content={comment.text} className="text-sm" />
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              {/* Novo comentário com editor rico */}
-              <RichTextEditor
-                content={newComment}
-                onChange={setNewComment}
-                onSubmit={handleSubmitComment}
-                placeholder="Adicione um comentário..."
-                minHeight="80px"
-                maxHeight="200px"
-                onImageUpload={handleImageUpload}
-                onFileAttach={handleCommentFileAttach}
-                isLoading={isLoading}
-                submitLabel="Enviar"
-                attachedFiles={commentAttachedFiles}
-                onRemoveFile={handleRemoveCommentFile}
-                variant="comment"
-              />
+              <Badge variant="outline" className="shrink-0">#{task.id}</Badge>
             </div>
           </div>
+        </ResizableDialogHeader>
 
-          {/* Sidebar */}
-          <div className="space-y-6">
-            {/* Informações da Tarefa */}
-            <div className="bg-gray-50 p-4 rounded-lg space-y-3">
-              <h3 className="text-sm font-medium">Informações</h3>
-              
-              <div className="space-y-2 text-sm">
-                <div className="flex items-center gap-2">
-                  <User className="h-4 w-4 text-gray-500" />
-                  <span className="font-medium">Responsável: {task.assignee.name}</span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-gray-500" />
-                  <span className="font-medium">Período:</span>
-                </div>
-                <div className="ml-6 text-sm">
-                  {formatDate(task.startDate)} - {formatDate(task.endDate)}
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-gray-500" />
-                  <span className="font-medium">Progresso:</span>
-                </div>
-                <div className="ml-6">
-                  <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
-                    <div className="flex items-center gap-1">
-                      <span>{Number(task.actualHours) || 0}h / {Number(task.estimatedHours) || 0}h</span>
-                      {Number(task.actualHours) > Number(task.estimatedHours) && (
-                        <AlertCircle className="h-3 w-3 text-orange-500" />
-                      )}
-                    </div>
-                    <span>{Math.round(getProgressPercentage()) || 0}%</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div
-                      className={`h-2 rounded-full transition-all ${getProgressColor()}`}
-                      style={{ width: `${getProgressPercentage()}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Tabs de Horas */}
-            <Tabs defaultValue="lancamento" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="lancamento">Lançamento</TabsTrigger>
-                <TabsTrigger value="historico" className="flex items-center gap-1">
-                  <History className="h-3 w-3" />
-                  Tempo
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="lancamento" className="mt-0">
-                <div className="bg-blue-50 p-4 rounded-lg h-[320px] flex flex-col">
-                  <h3 className="text-sm font-medium mb-3">Lançar Horas</h3>
-                  <div className="space-y-3 flex-1 flex flex-col justify-between">
-                    <div className="space-y-3">
-                      <Select value={reason} onValueChange={(value) => setReason(value as TaskHoursReason)}>
-                        <SelectTrigger disabled={isLoading}>
-                          <SelectValue placeholder="Selecione o motivo" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Object.entries(TaskHoursReasonLabels).map(([key, label]) => (
-                            <SelectItem key={key} value={key}>
-                              {label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        type="number"
-                        step="0.5"
-                        min="0"
-                        value={hours}
-                        onChange={(e) => setHours(e.target.value)}
-                        placeholder="Ex: 2, 5, 8"
-                      />
-                      <Textarea
-                        value={comment}
-                        onChange={(e) => setComment(e.target.value)}
-                        placeholder="Comentário (opcional)"
-                        rows={3}
-                      />
-                    </div>
-                    <Button
-                      onClick={handleAddHours}
-                      disabled={isLoading || !hours || !reason}
-                      className="w-full"
-                    >
-                      <Clock className="h-4 w-4 mr-2" />
-                      Lançar Horas
-                    </Button>
-                  </div>
-                </div>
-              </TabsContent>
-
-              <TabsContent value="historico" className="mt-0">
-                <div className="bg-gray-50 p-4 rounded-lg h-[320px] flex flex-col">
-                  <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
-                    <History className="h-4 w-4" />
-                    Histórico de Tempo
-                  </h3>
-                  <ScrollArea className="flex-1">
-                    {loadingHistory ? (
-                      <div className="flex items-center justify-center py-8">
-                        <Clock className="h-6 w-6 animate-spin text-gray-400" />
+        {/* Conteúdo com scroll */}
+        <div className="flex-1 overflow-hidden">
+          <ScrollArea className="h-full">
+            <div className="p-6">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Coluna Principal */}
+                <div className="lg:col-span-2 space-y-4">
+                  {/* Card de Informações Resumidas */}
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-xl p-4">
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-white rounded-lg shadow-sm">
+                          <User className="h-5 w-5 text-blue-600" />
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Responsável</p>
+                          <p className="text-sm font-medium">{task.assignee.name}</p>
+                        </div>
                       </div>
-                    ) : hoursHistory.length === 0 ? (
-                      <div className="text-center py-8 text-gray-500">
-                        <History className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                        <p className="text-sm">Nenhum lançamento registrado</p>
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-white rounded-lg shadow-sm">
+                          <Calendar className="h-5 w-5 text-green-600" />
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Período</p>
+                          <p className="text-sm font-medium">{formatDate(task.startDate)} - {formatDate(task.endDate)}</p>
+                        </div>
                       </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {hoursHistory.map((entry) => (
-                          <div
-                            key={entry.id}
-                            className="border border-gray-200 rounded-lg p-3 bg-white"
-                          >
-                            <div className="flex items-center justify-between mb-2">
-                              <div className="flex items-center gap-2">
-                                <div className="text-xs font-medium">{entry.user.name}</div>
-                                <div className="text-xs text-gray-500">
-                                  {formatDateTime(entry.createdAt)}
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-1">
-                                {entry.hoursChanged > 0 ? (
-                                  <TrendingUp className="h-3 w-3 text-orange-600" />
-                                ) : (
-                                  <TrendingDown className="h-3 w-3 text-green-600" />
-                                )}
-                                <span className={`text-sm font-medium ${
-                                  entry.hoursChanged > 0 ? 'text-orange-600' : 'text-green-600'
-                                }`}>
-                                  {entry.hoursChanged > 0 ? '+' : ''}{entry.hoursChanged}h
-                                </span>
-                                {canAccessHoursEntryOptions(entry) && (
-                                  <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-                                        <MoreVertical className="h-3 w-3" />
-                                      </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end">
-                                      <DropdownMenuItem onClick={() => handleEditEntry(entry)}>
-                                        <Edit className="h-3 w-3 mr-2" />
-                                        Editar
-                                      </DropdownMenuItem>
-                                      <DropdownMenuSeparator />
-                                      <DropdownMenuItem 
-                                        onClick={() => handleDeleteEntry(entry)}
-                                        className="text-destructive focus:text-destructive"
-                                      >
-                                        <Trash2 className="h-3 w-3 mr-2" />
-                                        Excluir
-                                      </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                  </DropdownMenu>
-                                )}
-                              </div>
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-white rounded-lg shadow-sm">
+                          <Clock className="h-5 w-5 text-orange-600" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs text-gray-500">Progresso</p>
+                            <span className="text-xs font-medium">{Math.round(getProgressPercentage())}%</span>
+                          </div>
+                          <div className="flex items-center gap-2 mt-1">
+                            <div className="flex-1 bg-gray-200 rounded-full h-2">
+                              <div
+                                className={`h-2 rounded-full transition-all ${getProgressColor()}`}
+                                style={{ width: `${getProgressPercentage()}%` }}
+                              />
                             </div>
-                            {entry.comment && (
-                              <div className="text-xs bg-gray-100 rounded p-2 mt-2">
-                                {entry.comment}
-                              </div>
+                            <span className="text-xs font-medium whitespace-nowrap">
+                              {Number(task.actualHours) || 0}h / {Number(task.estimatedHours) || 0}h
+                            </span>
+                            {Number(task.actualHours) > Number(task.estimatedHours) && (
+                              <AlertCircle className="h-4 w-4 text-orange-500 shrink-0" />
                             )}
                           </div>
-                        ))}
+                        </div>
                       </div>
-                    )}
-                  </ScrollArea>
+                    </div>
+                  </div>
+
+                  {/* Descrição - Colapsável */}
+                  <Collapsible open={descriptionOpen} onOpenChange={setDescriptionOpen}>
+                    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                      <CollapsibleTrigger className="w-full">
+                        <div className="flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors">
+                          <div className="flex items-center gap-2">
+                            <FileText className="h-5 w-5 text-gray-600" />
+                            <span className="font-medium text-gray-900">Descrição</span>
+                          </div>
+                          {descriptionOpen ? (
+                            <ChevronDown className="h-5 w-5 text-gray-500" />
+                          ) : (
+                            <ChevronRight className="h-5 w-5 text-gray-500" />
+                          )}
+                        </div>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <div className="p-4 border-t border-gray-100">
+                          <RichTextEditor
+                            content={description}
+                            onChange={setDescription}
+                            placeholder="Descreva os detalhes da tarefa..."
+                            minHeight="150px"
+                            maxHeight="400px"
+                            onImageUpload={handleImageUpload}
+                            onFileAttach={async (file) => {
+                              await handleAttachmentUpload({ target: { files: [file] } } as any);
+                            }}
+                            showToolbar={true}
+                          />
+                          <div className="flex items-center gap-2 mt-3">
+                            <Button
+                              onClick={handleSaveDescription}
+                              disabled={isLoading}
+                              size="sm"
+                            >
+                              {isLoading ? (
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              ) : (
+                                <Save className="h-4 w-4 mr-2" />
+                              )}
+                              Salvar Descrição
+                            </Button>
+                          </div>
+                        </div>
+                      </CollapsibleContent>
+                    </div>
+                  </Collapsible>
+
+                  {/* Anexos - Colapsável */}
+                  {attachments.length > 0 && (
+                    <Collapsible open={attachmentsOpen} onOpenChange={setAttachmentsOpen}>
+                      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                        <CollapsibleTrigger className="w-full">
+                          <div className="flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors">
+                            <div className="flex items-center gap-2">
+                              <Paperclip className="h-5 w-5 text-gray-600" />
+                              <span className="font-medium text-gray-900">Anexos</span>
+                              <Badge variant="secondary" className="ml-2">{attachments.length}</Badge>
+                            </div>
+                            {attachmentsOpen ? (
+                              <ChevronDown className="h-5 w-5 text-gray-500" />
+                            ) : (
+                              <ChevronRight className="h-5 w-5 text-gray-500" />
+                            )}
+                          </div>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="p-4 border-t border-gray-100">
+                            <div className="grid grid-cols-2 gap-3">
+                              {attachments.map((attachment) => (
+                                <div key={attachment.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                                  {attachment.mimeType?.startsWith('image/') && (
+                                    <img
+                                      src={`${import.meta.env.VITE_API_BASE_URL}${attachment.fileUrl}`}
+                                      alt={attachment.fileName}
+                                      className="h-12 w-12 object-cover rounded cursor-pointer"
+                                      onClick={() => downloadFile(attachment.fileUrl, attachment.fileName)}
+                                    />
+                                  )}
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium truncate">{attachment.fileName}</p>
+                                    <p className="text-xs text-gray-500">
+                                      {attachment.fileSize ? (attachment.fileSize / (1024 * 1024)).toFixed(2) : '0'} MB
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => downloadFile(attachment.fileUrl, attachment.fileName)}
+                                    >
+                                      <Download className="h-4 w-4" />
+                                    </Button>
+                                    {canDeleteAttachment(attachment) && (
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => removeAttachment(attachment.id)}
+                                        disabled={isLoading}
+                                      >
+                                        <Trash2 className="h-4 w-4 text-red-500" />
+                                      </Button>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </CollapsibleContent>
+                      </div>
+                    </Collapsible>
+                  )}
+
+                  <input
+                    ref={attachmentInputRef}
+                    type="file"
+                    className="hidden"
+                    onChange={handleAttachmentUpload}
+                  />
+
+                  {/* Comentários - Colapsável */}
+                  <Collapsible open={commentsOpen} onOpenChange={setCommentsOpen}>
+                    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                      <CollapsibleTrigger className="w-full">
+                        <div className="flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors">
+                          <div className="flex items-center gap-2">
+                            <MessageSquare className="h-5 w-5 text-gray-600" />
+                            <span className="font-medium text-gray-900">Comentários</span>
+                            {comments.length > 0 && (
+                              <Badge variant="secondary" className="ml-2">{comments.length}</Badge>
+                            )}
+                          </div>
+                          {commentsOpen ? (
+                            <ChevronDown className="h-5 w-5 text-gray-500" />
+                          ) : (
+                            <ChevronRight className="h-5 w-5 text-gray-500" />
+                          )}
+                        </div>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <div className="p-4 border-t border-gray-100 space-y-4">
+                          {/* Lista de comentários */}
+                          {comments.length > 0 && (
+                            <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2">
+                              {comments.map((comment) => (
+                                <div key={comment.id} className="bg-gray-50 p-4 rounded-xl border border-gray-100">
+                                  <div className="flex items-center justify-between mb-3">
+                                    <div className="flex items-center gap-3">
+                                      <Avatar className="h-8 w-8 ring-2 ring-white shadow-sm">
+                                        <AvatarFallback className="text-xs bg-gradient-to-br from-blue-500 to-indigo-600 text-white">
+                                          {getInitials(comment.user.name)}
+                                        </AvatarFallback>
+                                      </Avatar>
+                                      <div>
+                                        <span className="text-sm font-medium">{comment.user.name}</span>
+                                        <span className="text-xs text-gray-500 ml-2">
+                                          {formatDateTime(comment.createdAt)}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    {canEditComment(comment) && (
+                                      <div className="flex items-center gap-1">
+                                        {!comment.fileName && editingCommentId !== comment.id && (
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => startEditingComment(comment)}
+                                            disabled={isLoading}
+                                            className="h-8 w-8 p-0"
+                                          >
+                                            <Edit className="h-4 w-4 text-gray-500" />
+                                          </Button>
+                                        )}
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => removeComment(comment.id)}
+                                          disabled={isLoading}
+                                          className="h-8 w-8 p-0"
+                                        >
+                                          <Trash2 className="h-4 w-4 text-red-500" />
+                                        </Button>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {comment.fileName ? (
+                                    <div className="space-y-2">
+                                      {comment.text && comment.text !== comment.fileName && (
+                                        <RichTextViewer content={comment.text} className="text-sm" />
+                                      )}
+                                      {comment.mimeType?.startsWith('image/') && comment.fileUrl && (
+                                        <div className="relative max-w-sm">
+                                          <img
+                                            src={`${import.meta.env.VITE_API_BASE_URL}${comment.fileUrl}`}
+                                            alt={comment.fileName}
+                                            className="rounded-lg max-h-48 object-contain cursor-pointer hover:opacity-90 transition-opacity"
+                                            onClick={() => downloadFile(comment.fileUrl!, comment.fileName!)}
+                                          />
+                                        </div>
+                                      )}
+                                      <div className="flex items-center gap-2 text-sm bg-white p-2 rounded-lg">
+                                        <Paperclip className="h-4 w-4 text-gray-500" />
+                                        <span className="font-medium truncate">{comment.fileName}</span>
+                                        <span className="text-xs text-gray-500">
+                                          {comment.fileSize ? (comment.fileSize / (1024 * 1024)).toFixed(2) : '0'} MB
+                                        </span>
+                                        {comment.fileUrl && (
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => downloadFile(comment.fileUrl!, comment.fileName!)}
+                                            className="ml-auto h-7 px-2"
+                                          >
+                                            <Download className="h-4 w-4" />
+                                          </Button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ) : editingCommentId === comment.id ? (
+                                    <div className="space-y-3">
+                                      <RichTextEditor
+                                        content={editingCommentText}
+                                        onChange={setEditingCommentText}
+                                        placeholder="Editar comentário..."
+                                        minHeight="80px"
+                                        maxHeight="200px"
+                                        onImageUpload={handleImageUpload}
+                                        showToolbar={true}
+                                      />
+                                      <div className="flex gap-2">
+                                        <Button
+                                          size="sm"
+                                          onClick={saveEditedComment}
+                                          disabled={isLoading || !editingCommentText.replace(/<[^>]*>/g, '').trim()}
+                                        >
+                                          <Save className="h-4 w-4 mr-1" />
+                                          Salvar
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={cancelEditingComment}
+                                          disabled={isLoading}
+                                        >
+                                          Cancelar
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <RichTextViewer content={comment.text} className="text-sm" />
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Novo comentário */}
+                          <div className="pt-2 border-t border-gray-100">
+                            <RichTextEditor
+                              content={newComment}
+                              onChange={setNewComment}
+                              onSubmit={handleSubmitComment}
+                              placeholder="Adicione um comentário..."
+                              minHeight="80px"
+                              maxHeight="200px"
+                              onImageUpload={handleImageUpload}
+                              onFileAttach={handleCommentFileAttach}
+                              isLoading={isLoading}
+                              submitLabel="Enviar"
+                              attachedFiles={commentAttachedFiles}
+                              onRemoveFile={handleRemoveCommentFile}
+                              variant="comment"
+                            />
+                          </div>
+                        </div>
+                      </CollapsibleContent>
+                    </div>
+                  </Collapsible>
                 </div>
-              </TabsContent>
-            </Tabs>
-          </div>
+
+                {/* Sidebar */}
+                <div className="space-y-4">
+                  {/* Tabs de Horas */}
+                  <Tabs defaultValue="lancamento" className="w-full">
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="lancamento" className="text-xs">Lançamento</TabsTrigger>
+                      <TabsTrigger value="historico" className="flex items-center gap-1 text-xs">
+                        <History className="h-3 w-3" />
+                        Histórico
+                      </TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="lancamento" className="mt-2">
+                      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 p-4 rounded-xl">
+                        <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
+                          <Clock className="h-4 w-4 text-blue-600" />
+                          Lançar Horas
+                        </h3>
+                        <div className="space-y-3">
+                          <Select value={reason} onValueChange={(value) => setReason(value as TaskHoursReason)}>
+                            <SelectTrigger disabled={isLoading} className="bg-white">
+                              <SelectValue placeholder="Selecione o motivo" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {Object.entries(TaskHoursReasonLabels).map(([key, label]) => (
+                                <SelectItem key={key} value={key}>
+                                  {label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Input
+                            type="number"
+                            step="0.5"
+                            min="0"
+                            value={hours}
+                            onChange={(e) => setHours(e.target.value)}
+                            placeholder="Horas (ex: 2, 5, 8)"
+                            className="bg-white"
+                          />
+                          <Textarea
+                            value={comment}
+                            onChange={(e) => setComment(e.target.value)}
+                            placeholder="Comentário (opcional)"
+                            rows={3}
+                            className="bg-white resize-none"
+                          />
+                          <Button
+                            onClick={handleAddHours}
+                            disabled={isLoading || !hours || !reason}
+                            className="w-full"
+                          >
+                            {isLoading ? (
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            ) : (
+                              <Clock className="h-4 w-4 mr-2" />
+                            )}
+                            Lançar Horas
+                          </Button>
+                        </div>
+                      </div>
+                    </TabsContent>
+
+                    <TabsContent value="historico" className="mt-2">
+                      <div className="bg-white border border-gray-200 p-4 rounded-xl">
+                        <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
+                          <History className="h-4 w-4 text-gray-600" />
+                          Histórico de Tempo
+                        </h3>
+                        <ScrollArea className="h-[300px]">
+                          {loadingHistory ? (
+                            <div className="flex items-center justify-center py-8">
+                              <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+                            </div>
+                          ) : hoursHistory.length === 0 ? (
+                            <div className="text-center py-8 text-gray-500">
+                              <History className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                              <p className="text-sm">Nenhum lançamento registrado</p>
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              {hoursHistory.map((entry) => (
+                                <div
+                                  key={entry.id}
+                                  className="border border-gray-100 rounded-lg p-3 bg-gray-50 hover:bg-gray-100 transition-colors"
+                                >
+                                  <div className="flex items-center justify-between mb-1">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs font-medium">{entry.user.name}</span>
+                                      <span className="text-xs text-gray-400">
+                                        {formatDateTime(entry.createdAt)}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                      {entry.hoursChanged > 0 ? (
+                                        <TrendingUp className="h-3 w-3 text-orange-600" />
+                                      ) : (
+                                        <TrendingDown className="h-3 w-3 text-green-600" />
+                                      )}
+                                      <span className={`text-sm font-semibold ${
+                                        entry.hoursChanged > 0 ? 'text-orange-600' : 'text-green-600'
+                                      }`}>
+                                        {entry.hoursChanged > 0 ? '+' : ''}{entry.hoursChanged}h
+                                      </span>
+                                      {canAccessHoursEntryOptions(entry) && (
+                                        <DropdownMenu>
+                                          <DropdownMenuTrigger asChild>
+                                            <Button variant="ghost" size="sm" className="h-6 w-6 p-0 ml-1">
+                                              <MoreVertical className="h-3 w-3" />
+                                            </Button>
+                                          </DropdownMenuTrigger>
+                                          <DropdownMenuContent align="end">
+                                            <DropdownMenuItem onClick={() => handleEditEntry(entry)}>
+                                              <Edit className="h-3 w-3 mr-2" />
+                                              Editar
+                                            </DropdownMenuItem>
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuItem
+                                              onClick={() => handleDeleteEntry(entry)}
+                                              className="text-destructive focus:text-destructive"
+                                            >
+                                              <Trash2 className="h-3 w-3 mr-2" />
+                                              Excluir
+                                            </DropdownMenuItem>
+                                          </DropdownMenuContent>
+                                        </DropdownMenu>
+                                      )}
+                                    </div>
+                                  </div>
+                                  {entry.comment && (
+                                    <div className="text-xs text-gray-600 bg-white rounded p-2 mt-2">
+                                      {entry.comment}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </ScrollArea>
+                      </div>
+                    </TabsContent>
+                  </Tabs>
+                </div>
+              </div>
+            </div>
+          </ScrollArea>
         </div>
-      </DialogContent>
+      </ResizableDialogContent>
 
       {/* Modal de Edição de Histórico */}
       <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
@@ -1225,7 +1406,7 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </Dialog>
+    </ResizableDialog>
   );
 };
 

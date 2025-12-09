@@ -47,6 +47,20 @@ export class TasksController {
     private readonly taskAttachmentRepository: Repository<TaskAttachment>,
   ) {}
 
+  @Get(':id')
+  async getTask(@Param('id', ParseIntPipe) taskId: number) {
+    const task = await this.taskRepository.findOne({
+      where: { id: taskId },
+      relations: ['assignee', 'status', 'sprint', 'project'],
+    });
+
+    if (!task) {
+      throw new NotFoundException(`Tarefa com ID ${taskId} não encontrada`);
+    }
+
+    return task;
+  }
+
   @Patch(':id')
   async updateTask(
     @Param('id', ParseIntPipe) taskId: number,

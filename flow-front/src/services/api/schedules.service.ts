@@ -61,6 +61,11 @@ export class SchedulesService {
     return response.data;
   }
 
+  static async getTask(taskId: number): Promise<ScheduleTask> {
+    const response = await api.get<ScheduleTask>(`/tasks/${taskId}`);
+    return response.data;
+  }
+
   static async updateTask(taskId: number, data: UpdateScheduleTaskDto): Promise<ScheduleTask> {
     const response = await api.patch<ScheduleTask>(`/tasks/${taskId}`, data);
     return response.data;
