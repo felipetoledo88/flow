@@ -5,6 +5,7 @@ import {
   TaskDependency,
   TaskHoursHistory,
   TaskComment,
+  TaskAttachment,
   CreateScheduleDto,
   UpdateScheduleDto,
   UpdateScheduleTaskDto,
@@ -209,10 +210,14 @@ export class SchedulesService {
 
   static async createTaskCommentWithFile(
     taskId: number,
-    file: File
+    file: File,
+    text?: string
   ): Promise<TaskComment> {
     const formData = new FormData();
     formData.append('file', file);
+    if (text && text.trim()) {
+      formData.append('text', text.trim());
+    }
 
     const response = await api.post<TaskComment>(
       `/tasks/${taskId}/comments/file`,
@@ -239,6 +244,52 @@ export class SchedulesService {
       { text }
     );
     return response.data;
+  }
+
+  // Upload de imagem inline (retorna URL)
+  static async uploadImage(file: File): Promise<string> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await api.post<{ url: string }>(
+      '/tasks/upload-image',
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      }
+    );
+    return `${import.meta.env.VITE_API_BASE_URL}${response.data.url}`;
+  }
+
+  // Task Attachments
+  static async getTaskAttachments(taskId: number): Promise<TaskAttachment[]> {
+    const response = await api.get<TaskAttachment[]>(`/tasks/${taskId}/attachments`);
+    return response.data;
+  }
+
+  static async createTaskAttachment(
+    taskId: number,
+    file: File
+  ): Promise<TaskAttachment> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await api.post<TaskAttachment>(
+      `/tasks/${taskId}/attachments`,
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      }
+    );
+    return response.data;
+  }
+
+  static async deleteTaskAttachment(attachmentId: number): Promise<void> {
+    await api.delete(`/tasks/attachments/${attachmentId}`);
   }
 }
 

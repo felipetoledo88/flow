@@ -35,18 +35,18 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Task, TaskComment, TaskHoursHistory, UpdateTaskHoursDto } from '@/types/schedule';
+import { Textarea } from '@/components/ui/textarea';
+import { RichTextEditor, RichTextViewer, AttachedFile } from '@/components/ui/rich-text-editor';
+import { Task, TaskComment, TaskAttachment, TaskHoursHistory, UpdateTaskHoursDto } from '@/types/schedule';
 import { SchedulesService } from '@/services/api/schedules.service';
 import { TaskHoursReason, TaskHoursReasonLabels } from '@/enums/task-hours-reason.enum';
-import { 
-  Clock, 
-  User, 
-  Calendar, 
-  Plus, 
-  Send, 
-  Paperclip, 
+import {
+  Clock,
+  User,
+  Calendar,
+  Plus,
+  Paperclip,
   Download,
   X,
   Save,
@@ -85,7 +85,6 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [hoursHistory, setHoursHistory] = useState<TaskHoursHistory[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Estados para edição e exclusão de histórico
   const [editingEntry, setEditingEntry] = useState<TaskHoursHistory | null>(null);
@@ -103,9 +102,13 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
   const [editingCommentId, setEditingCommentId] = useState<number | null>(null);
   const [editingCommentText, setEditingCommentText] = useState<string>('');
 
-  // Estados para preview de imagem
-  const [pendingFile, setPendingFile] = useState<File | null>(null);
-  const [pendingFilePreview, setPendingFilePreview] = useState<string | null>(null);
+  // Estados para arquivos anexados no novo comentário
+  const [commentAttachedFiles, setCommentAttachedFiles] = useState<AttachedFile[]>([]);
+
+  // Estados para anexos da descrição
+  const [attachments, setAttachments] = useState<TaskAttachment[]>([]);
+  const [loadingAttachments, setLoadingAttachments] = useState(false);
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
 
   // Hook para autenticação
   const { user: currentUser } = useAuth();
@@ -134,11 +137,12 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
     return comment.user.id === parseInt(currentUser.id);
   };
 
-  // Carregar histórico e comentários quando o modal abrir
+  // Carregar histórico, comentários e anexos quando o modal abrir
   React.useEffect(() => {
     if (isOpen && task) {
       loadHoursHistory();
       loadComments();
+      loadAttachments();
     }
   }, [isOpen, task]);
 
@@ -193,7 +197,7 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
 
   const loadComments = async () => {
     if (!task) return;
-    
+
     try {
       const commentsData = await SchedulesService.getTaskComments(task.id);
       setComments(commentsData);
@@ -205,6 +209,108 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
         variant: "destructive",
       });
     }
+  };
+
+  const loadAttachments = async () => {
+    if (!task) return;
+
+    setLoadingAttachments(true);
+    try {
+      const attachmentsData = await SchedulesService.getTaskAttachments(task.id);
+      setAttachments(attachmentsData);
+    } catch (error) {
+      setAttachments([]);
+    } finally {
+      setLoadingAttachments(false);
+    }
+  };
+
+  const handleAttachmentUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !task) return;
+
+    setIsLoading(true);
+    try {
+      const newAttachment = await SchedulesService.createTaskAttachment(task.id, file);
+      setAttachments([newAttachment, ...attachments]);
+      toast({
+        title: "Anexo adicionado",
+        description: `${file.name} foi anexado com sucesso.`,
+      });
+
+      if (attachmentInputRef.current) {
+        attachmentInputRef.current.value = '';
+      }
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: "Não foi possível adicionar o anexo.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const removeAttachment = async (attachmentId: number) => {
+    setIsLoading(true);
+    try {
+      await SchedulesService.deleteTaskAttachment(attachmentId);
+      setAttachments(attachments.filter(a => a.id !== attachmentId));
+      toast({
+        title: "Anexo removido",
+        description: "O anexo foi removido com sucesso.",
+      });
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: "Não foi possível remover o anexo.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const canDeleteAttachment = (attachment: TaskAttachment) => {
+    if (!currentUser) return false;
+    return attachment.userId === parseInt(currentUser.id);
+  };
+
+  // Upload de imagem inline para o editor
+  const handleImageUpload = async (file: File): Promise<string> => {
+    try {
+      const url = await SchedulesService.uploadImage(file);
+      return url;
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: "Não foi possível fazer upload da imagem.",
+        variant: "destructive",
+      });
+      throw error;
+    }
+  };
+
+  // Anexar arquivo no comentário
+  const handleCommentFileAttach = async (file: File) => {
+    const newAttachedFile: AttachedFile = {
+      file,
+      preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined,
+    };
+    setCommentAttachedFiles(prev => [...prev, newAttachedFile]);
+  };
+
+  // Remover arquivo anexado do comentário
+  const handleRemoveCommentFile = (index: number) => {
+    setCommentAttachedFiles(prev => {
+      const newFiles = [...prev];
+      if (newFiles[index].preview) {
+        URL.revokeObjectURL(newFiles[index].preview!);
+      }
+      newFiles.splice(index, 1);
+      return newFiles;
+    });
   };
 
   const getInitials = (name: string) => {
@@ -298,30 +404,6 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
     setIsEditingTitle(false);
   };
 
-  const handleAddComment = async () => {
-    if (!newComment.trim() || !task) return;
-
-    setIsLoading(true);
-    try {
-      const newCommentObj = await SchedulesService.createTaskComment(task.id, newComment);
-      setComments([newCommentObj, ...comments]);
-      setNewComment('');
-
-      toast({
-        title: "Comentário adicionado",
-        description: "Seu comentário foi adicionado com sucesso.",
-      });
-    } catch (error) {
-      toast({
-        title: "Erro",
-        description: "Não foi possível adicionar o comentário.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const handleAddHours = async () => {
     const hoursToAdd = parseFloat(hours);
     
@@ -388,53 +470,56 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
     }
   };
 
+  const handleSubmitComment = async () => {
+    // Verifica se tem conteúdo (texto com mais que tags vazias ou arquivos)
+    const hasContent = newComment && newComment.replace(/<[^>]*>/g, '').trim().length > 0;
+    const hasFiles = commentAttachedFiles.length > 0;
 
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    setPendingFile(file);
-
-    // Se for imagem, criar preview
-    if (file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPendingFilePreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    } else {
-      setPendingFilePreview(null);
-    }
-
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-
-  const cancelPendingFile = () => {
-    setPendingFile(null);
-    setPendingFilePreview(null);
-  };
-
-  const confirmFileUpload = async () => {
-    if (!pendingFile || !task) return;
+    if (!task || (!hasContent && !hasFiles)) return;
 
     setIsLoading(true);
     try {
-      const fileComment = await SchedulesService.createTaskCommentWithFile(task.id, pendingFile);
-      setComments([fileComment, ...comments]);
+      const newComments: TaskComment[] = [];
 
-      toast({
-        title: "Arquivo anexado",
-        description: `${pendingFile.name} foi anexado como comentário.`,
+      // Se tem arquivos, envia cada um como comentário separado com o texto no primeiro
+      if (hasFiles) {
+        for (let i = 0; i < commentAttachedFiles.length; i++) {
+          const file = commentAttachedFiles[i].file;
+          const textToSend = i === 0 && hasContent ? newComment : undefined;
+
+          const commentObj = await SchedulesService.createTaskCommentWithFile(
+            task.id,
+            file,
+            textToSend
+          );
+          newComments.push(commentObj);
+        }
+        toast({
+          title: "Comentário adicionado",
+          description: `${commentAttachedFiles.length} arquivo(s) anexado(s) com sucesso.`,
+        });
+      } else if (hasContent) {
+        // Envia apenas texto rico (pode conter imagens inline)
+        const commentObj = await SchedulesService.createTaskComment(task.id, newComment);
+        newComments.push(commentObj);
+        toast({
+          title: "Comentário adicionado",
+          description: "Seu comentário foi adicionado com sucesso.",
+        });
+      }
+
+      setComments([...newComments.reverse(), ...comments]);
+      setNewComment('');
+      // Limpar arquivos anexados
+      commentAttachedFiles.forEach(f => {
+        if (f.preview) URL.revokeObjectURL(f.preview);
       });
-
-      setPendingFile(null);
-      setPendingFilePreview(null);
+      setCommentAttachedFiles([]);
     } catch (error) {
+      console.error('Error adding comment:', error);
       toast({
         title: "Erro",
-        description: "Não foi possível anexar o arquivo.",
+        description: "Não foi possível adicionar o comentário.",
         variant: "destructive",
       });
     } finally {
@@ -687,21 +772,83 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
             {/* Descrição */}
             <div>
               <label className="text-sm font-medium mb-2 block">Descrição</label>
-              <Textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
+              <RichTextEditor
+                content={description}
+                onChange={setDescription}
                 placeholder="Descreva os detalhes da tarefa..."
-                className="min-h-[100px]"
+                minHeight="120px"
+                maxHeight="300px"
+                onImageUpload={handleImageUpload}
+                onFileAttach={async (file) => {
+                  await handleAttachmentUpload({ target: { files: [file] } } as any);
+                }}
+                showToolbar={true}
               />
-              <Button
-                onClick={handleSaveDescription}
-                disabled={isLoading}
-                className="mt-2"
-                size="sm"
-              >
-                <Save className="h-4 w-4 mr-2" />
-                Salvar Descrição
-              </Button>
+              <div className="flex items-center gap-2 mt-2">
+                <Button
+                  onClick={handleSaveDescription}
+                  disabled={isLoading}
+                  size="sm"
+                >
+                  {isLoading ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4 mr-2" />
+                  )}
+                  Salvar Descrição
+                </Button>
+              </div>
+
+              {/* Lista de anexos */}
+              {attachments.length > 0 && (
+                <div className="mt-3 space-y-2">
+                  <label className="text-xs font-medium text-gray-500">Anexos da atividade</label>
+                  <div className="space-y-2">
+                    {attachments.map((attachment) => (
+                      <div key={attachment.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
+                        {attachment.mimeType?.startsWith('image/') && (
+                          <img
+                            src={`${import.meta.env.VITE_API_BASE_URL}${attachment.fileUrl}`}
+                            alt={attachment.fileName}
+                            className="h-10 w-10 object-cover rounded cursor-pointer"
+                            onClick={() => downloadFile(attachment.fileUrl, attachment.fileName)}
+                          />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{attachment.fileName}</p>
+                          <p className="text-xs text-gray-500">
+                            {attachment.fileSize ? (attachment.fileSize / (1024 * 1024)).toFixed(2) : '0'} MB
+                          </p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => downloadFile(attachment.fileUrl, attachment.fileName)}
+                        >
+                          <Download className="h-4 w-4" />
+                        </Button>
+                        {canDeleteAttachment(attachment) && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeAttachment(attachment.id)}
+                            disabled={isLoading}
+                          >
+                            <Trash2 className="h-4 w-4 text-red-500" />
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <input
+                ref={attachmentInputRef}
+                type="file"
+                className="hidden"
+                onChange={handleAttachmentUpload}
+              />
             </div>
 
             {/* Comentários */}
@@ -751,6 +898,10 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
                     {/* Se for um arquivo */}
                     {comment.fileName ? (
                       <div className="space-y-2">
+                        {/* Texto do comentário (se diferente do nome do arquivo) */}
+                        {comment.text && comment.text !== comment.fileName && (
+                          <RichTextViewer content={comment.text} className="text-sm" />
+                        )}
                         {/* Preview de imagem se for imagem */}
                         {comment.mimeType?.startsWith('image/') && comment.fileUrl && (
                           <div className="relative max-w-xs">
@@ -781,17 +932,20 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
                       </div>
                     ) : editingCommentId === comment.id ? (
                       <div className="space-y-2">
-                        <Textarea
-                          value={editingCommentText}
-                          onChange={(e) => setEditingCommentText(e.target.value)}
-                          className="min-h-[60px]"
-                          disabled={isLoading}
+                        <RichTextEditor
+                          content={editingCommentText}
+                          onChange={setEditingCommentText}
+                          placeholder="Editar comentário..."
+                          minHeight="60px"
+                          maxHeight="150px"
+                          onImageUpload={handleImageUpload}
+                          showToolbar={true}
                         />
                         <div className="flex gap-2">
                           <Button
                             size="sm"
                             onClick={saveEditedComment}
-                            disabled={isLoading || !editingCommentText.trim()}
+                            disabled={isLoading || !editingCommentText.replace(/<[^>]*>/g, '').trim()}
                           >
                             <Save className="h-4 w-4 mr-1" />
                             Salvar
@@ -807,100 +961,27 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
                         </div>
                       </div>
                     ) : (
-                      <p className="text-sm">{comment.text}</p>
+                      <RichTextViewer content={comment.text} className="text-sm" />
                     )}
                   </div>
                 ))}
               </div>
 
-              {/* Preview de arquivo pendente */}
-              {pendingFile && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      {pendingFilePreview ? (
-                        <div className="mb-2">
-                          <img
-                            src={pendingFilePreview}
-                            alt={pendingFile.name}
-                            className="rounded-lg max-h-32 object-contain"
-                          />
-                        </div>
-                      ) : null}
-                      <div className="flex items-center gap-2 text-sm">
-                        <Paperclip className="h-4 w-4 text-blue-500" />
-                        <span className="font-medium">{pendingFile.name}</span>
-                        <span className="text-xs text-gray-500">
-                          ({(pendingFile.size / (1024 * 1024)).toFixed(2)} MB)
-                        </span>
-                      </div>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={cancelPendingFile}
-                      disabled={isLoading}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  <div className="flex gap-2 mt-2">
-                    <Button
-                      size="sm"
-                      onClick={confirmFileUpload}
-                      disabled={isLoading}
-                    >
-                      {isLoading ? (
-                        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                      ) : (
-                        <Send className="h-4 w-4 mr-1" />
-                      )}
-                      Enviar
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={cancelPendingFile}
-                      disabled={isLoading}
-                    >
-                      Cancelar
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              {/* Novo comentário */}
-              <div className="space-y-2">
-                <div className="flex gap-2">
-                  <Input
-                    value={newComment}
-                    onChange={(e) => setNewComment(e.target.value)}
-                    placeholder="Adicione um comentário..."
-                    onKeyPress={(e) => e.key === 'Enter' && handleAddComment()}
-                    disabled={isLoading}
-                  />
-                  <Button onClick={handleAddComment} size="sm" disabled={isLoading || !newComment.trim()}>
-                    <Send className="h-4 w-4" />
-                  </Button>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isLoading || !!pendingFile}
-                  >
-                    <Paperclip className="h-4 w-4 mr-2" />
-                    Anexar Arquivo
-                  </Button>
-                </div>
-              </div>
-
-              <input
-                ref={fileInputRef}
-                type="file"
-                className="hidden"
-                onChange={handleFileSelect}
+              {/* Novo comentário com editor rico */}
+              <RichTextEditor
+                content={newComment}
+                onChange={setNewComment}
+                onSubmit={handleSubmitComment}
+                placeholder="Adicione um comentário..."
+                minHeight="80px"
+                maxHeight="200px"
+                onImageUpload={handleImageUpload}
+                onFileAttach={handleCommentFileAttach}
+                isLoading={isLoading}
+                submitLabel="Enviar"
+                attachedFiles={commentAttachedFiles}
+                onRemoveFile={handleRemoveCommentFile}
+                variant="comment"
               />
             </div>
           </div>

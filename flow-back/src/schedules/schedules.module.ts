@@ -14,6 +14,7 @@ import { TaskStatus } from './entities/task-status.entity';
 import { TaskDependency } from './entities/task-dependency.entity';
 import { TaskHoursHistory } from './entities/task-hours-history.entity';
 import { TaskComment } from './entities/task-comment.entity';
+import { TaskAttachment } from './entities/task-attachment.entity';
 import { Project } from '../projects/entities/project.entity';
 import { User } from '../users/entities/user.entity';
 import { Sprint } from '../common/entities/sprint.entity';
@@ -29,6 +30,7 @@ import { SprintsModule } from '../sprints/sprints.module';
       TaskDependency,
       TaskHoursHistory,
       TaskComment,
+      TaskAttachment,
       Project,
       User,
       Sprint,

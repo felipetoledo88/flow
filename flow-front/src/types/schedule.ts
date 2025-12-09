@@ -43,15 +43,13 @@ export interface TaskComment {
 export interface TaskAttachment {
   id: number;
   taskId: number;
-  uploadedById: string;
-  uploadedBy: User;
+  userId: number;
+  user: User;
   fileName: string;
-  originalName: string;
-  mimeType: string;
-  fileSize: number;
-  filePath: string;
+  mimeType?: string;
+  fileSize?: number;
+  fileUrl: string;
   createdAt: string;
-  updatedAt: string;
 }
 
 export enum DependencyType {

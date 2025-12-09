@@ -31,6 +31,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Task } from './entities/task.entity';
 import { TaskComment } from './entities/task-comment.entity';
+import { TaskAttachment } from './entities/task-attachment.entity';
 
 @Controller('tasks')
 @UseGuards(JwtAuthGuard)
@@ -42,6 +43,8 @@ export class TasksController {
     private readonly taskRepository: Repository<Task>,
     @InjectRepository(TaskComment)
     private readonly taskCommentRepository: Repository<TaskComment>,
+    @InjectRepository(TaskAttachment)
+    private readonly taskAttachmentRepository: Repository<TaskAttachment>,
   ) {}
 
   @Patch(':id')
@@ -184,35 +187,44 @@ export class TasksController {
   async createTaskCommentWithFile(
     @Param('id', ParseIntPipe) taskId: number,
     @UploadedFile() file: Express.Multer.File,
+    @Body() body: { text?: string },
     @Request() req,
   ) {
-    const userId = req.user?.id;
-    if (!userId) {
-      throw new Error('User ID not found in request');
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        throw new BadRequestException('User ID not found in request');
+      }
+
+      if (!file) {
+        throw new BadRequestException('No file provided');
+      }
+
+      // Generate file URL
+      const fileUrl = `/files/task-attachments/${file.filename}`;
+
+      // Pega o texto do body (pode vir como string do FormData)
+      const commentText = body?.text || req.body?.text || '';
+
+      const comment = this.taskCommentRepository.create({
+        taskId,
+        userId,
+        text: commentText || file.originalname,
+        fileName: file.originalname,
+        mimeType: file.mimetype,
+        fileSize: file.size,
+        fileUrl: fileUrl,
+      });
+
+      const savedComment = await this.taskCommentRepository.save(comment);
+      return this.taskCommentRepository.findOne({
+        where: { id: savedComment.id },
+        relations: ['user'],
+      });
+    } catch (error) {
+      console.error('Error creating comment with file:', error);
+      throw new BadRequestException(error.message || 'Failed to create comment with file');
     }
-
-    if (!file) {
-      throw new Error('No file provided');
-    }
-
-    // Generate file URL
-    const fileUrl = `/files/task-attachments/${file.filename}`;
-
-    const comment = this.taskCommentRepository.create({
-      taskId,
-      userId,
-      text: file.originalname, // Use filename as text for file comments
-      fileName: file.originalname,
-      mimeType: file.mimetype,
-      fileSize: file.size,
-      fileUrl: fileUrl,
-    });
-
-    const savedComment = await this.taskCommentRepository.save(comment);
-    return this.taskCommentRepository.findOne({
-      where: { id: savedComment.id },
-      relations: ['user'],
-    });
   }
 
   @Patch('comments/:commentId')
@@ -268,5 +280,137 @@ export class TasksController {
     }
 
     await this.taskCommentRepository.softDelete(commentId);
+  }
+
+  // Upload de imagem inline (retorna URL para uso no editor)
+  @Post('upload-image')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: (req, file, cb) => {
+          const uploadsDir = process.env.UPLOADS_DIR || 'uploads';
+          const uploadPath = join(
+            process.cwd(),
+            uploadsDir,
+            'task-attachments',
+          );
+          if (!existsSync(uploadPath)) {
+            mkdirSync(uploadPath, { recursive: true });
+          }
+          cb(null, uploadPath);
+        },
+        filename: (req, file, cb) => {
+          const uniqueSuffix =
+            Date.now() + '-' + Math.round(Math.random() * 1e9);
+          const ext = extname(file.originalname);
+          const filename = `${uniqueSuffix}${ext}`;
+          cb(null, filename);
+        },
+      }),
+      fileFilter: (req, file, cb) => {
+        if (!file.mimetype.startsWith('image/')) {
+          return cb(new Error('Only image files are allowed'), false);
+        }
+        cb(null, true);
+      },
+    }),
+  )
+  async uploadImage(@UploadedFile() file: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException('No file provided');
+    }
+
+    const fileUrl = `/files/task-attachments/${file.filename}`;
+    return { url: fileUrl };
+  }
+
+  // Task Attachments endpoints
+  @Get(':id/attachments')
+  async getTaskAttachments(@Param('id', ParseIntPipe) taskId: number) {
+    return this.taskAttachmentRepository.find({
+      where: { taskId },
+      relations: ['user'],
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  @Post(':id/attachments')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: (req, file, cb) => {
+          const uploadsDir = process.env.UPLOADS_DIR || 'uploads';
+          const uploadPath = join(
+            process.cwd(),
+            uploadsDir,
+            'task-attachments',
+          );
+          if (!existsSync(uploadPath)) {
+            mkdirSync(uploadPath, { recursive: true });
+          }
+          cb(null, uploadPath);
+        },
+        filename: (req, file, cb) => {
+          const uniqueSuffix =
+            Date.now() + '-' + Math.round(Math.random() * 1e9);
+          const ext = extname(file.originalname);
+          const filename = `${uniqueSuffix}${ext}`;
+          cb(null, filename);
+        },
+      }),
+    }),
+  )
+  async createTaskAttachment(
+    @Param('id', ParseIntPipe) taskId: number,
+    @UploadedFile() file: Express.Multer.File,
+    @Request() req,
+  ) {
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new BadRequestException('User ID not found in request');
+    }
+
+    if (!file) {
+      throw new BadRequestException('No file provided');
+    }
+
+    const fileUrl = `/files/task-attachments/${file.filename}`;
+
+    const attachment = this.taskAttachmentRepository.create({
+      taskId,
+      userId,
+      fileName: file.originalname,
+      mimeType: file.mimetype,
+      fileSize: file.size,
+      fileUrl: fileUrl,
+    });
+
+    const savedAttachment = await this.taskAttachmentRepository.save(attachment);
+    return this.taskAttachmentRepository.findOne({
+      where: { id: savedAttachment.id },
+      relations: ['user'],
+    });
+  }
+
+  @Delete('attachments/:attachmentId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteTaskAttachment(
+    @Param('attachmentId', ParseIntPipe) attachmentId: number,
+    @Request() req,
+  ) {
+    const userId = req.user?.id;
+    const attachment = await this.taskAttachmentRepository.findOne({
+      where: { id: attachmentId },
+    });
+
+    if (!attachment) {
+      throw new NotFoundException('Attachment not found');
+    }
+
+    if (attachment.userId !== userId) {
+      throw new ForbiddenException('Você só pode excluir seus próprios anexos');
+    }
+
+    await this.taskAttachmentRepository.delete(attachmentId);
   }
 }

@@ -15,6 +15,7 @@ import { TaskDependency } from './task-dependency.entity';
 import { Sprint } from '../../common/entities/sprint.entity';
 import { TaskStatus } from './task-status.entity';
 import { TaskComment } from './task-comment.entity';
+import { TaskAttachment } from './task-attachment.entity';
 
 // Manter enum para compatibilidade
 export enum TaskStatusEnum {
@@ -97,6 +98,9 @@ export class Task {
 
   @OneToMany(() => TaskComment, (comment) => comment.task)
   comments: TaskComment[];
+
+  @OneToMany(() => TaskAttachment, (attachment) => attachment.task)
+  attachments: TaskAttachment[];
 
   @CreateDateColumn({ type: 'timestamp' })
   createdAt: Date;
