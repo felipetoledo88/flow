@@ -1,13 +1,13 @@
 import React, { useMemo, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 import { Task, TaskStatusEntity } from '@/types/schedule';
 import { useTaskStatus } from '@/hooks/use-task-status';
 import { TaskStatusService } from '@/services/api/task-status.service';
-import { Clock, CheckCircle2, AlertTriangle, PlayCircle, Plus, GripVertical, AlertCircle, Calendar, CalendarX } from 'lucide-react';
+import { Clock, CheckCircle2, AlertTriangle, PlayCircle, Plus, AlertCircle, Calendar, CalendarX } from 'lucide-react';
 import CreateTaskStatusModal from './CreateTaskStatusModal';
+import EditTaskStatusModal from './EditTaskStatusModal';
 import StatusOptionsMenu from './StatusOptionsMenu';
 import DeleteStatusModal from './DeleteStatusModal';
 import TaskDetailsModal from './TaskDetailsModal';
@@ -189,8 +189,9 @@ const TaskCard: React.FC<TaskCardProps> = React.memo(({ task, onTaskClick }) => 
 const KanbanColumnComponent: React.FC<{
   column: KanbanColumn;
   onStatusDelete: (statusId: number) => void;
+  onStatusEdit: (status: TaskStatusEntity) => void;
   onTaskClick: (task: Task) => void;
-}> = ({ column, onStatusDelete, onTaskClick }) => {
+}> = ({ column, onStatusDelete, onStatusEdit, onTaskClick }) => {
   const { isOver, setNodeRef: setDroppableNodeRef } = useDroppable({
     id: `${column.id}`,
   });
@@ -251,6 +252,7 @@ const KanbanColumnComponent: React.FC<{
             <StatusOptionsMenu
               status={column.status}
               onDelete={onStatusDelete}
+              onEdit={onStatusEdit}
             />
           </div>
         </div>
@@ -290,6 +292,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, projectId, onTaskStatu
   const [activeColumn, setActiveColumn] = useState<KanbanColumn | null>(null);
   const [isCreateStatusModalOpen, setIsCreateStatusModalOpen] = useState(false);
   const [deleteStatusModal, setDeleteStatusModal] = useState<{ isOpen: boolean; status: TaskStatusEntity | null }>({ isOpen: false, status: null });
+  const [editStatusModal, setEditStatusModal] = useState<{ isOpen: boolean; status: TaskStatusEntity | null }>({ isOpen: false, status: null });
   const [isUpdating, setIsUpdating] = useState(false);
   const [taskDetailsModal, setTaskDetailsModal] = useState<{ isOpen: boolean; task: Task | null }>({ isOpen: false, task: null });
 
@@ -566,6 +569,14 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, projectId, onTaskStatu
     }
   };
 
+  const handleEdit = (status: TaskStatusEntity) => {
+    setEditStatusModal({ isOpen: true, status });
+  };
+
+  const handleEditStatusUpdated = async () => {
+    await refreshStatuses();
+  };
+
   const handleDeleteConfirm = async () => {
     if (!deleteStatusModal.status) return;
 
@@ -697,6 +708,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, projectId, onTaskStatu
                   <KanbanColumnComponent
                     column={column}
                     onStatusDelete={handleDelete}
+                    onStatusEdit={handleEdit}
                     onTaskClick={handleTaskClick}
                   />
                 </SortableContext>
@@ -718,6 +730,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, projectId, onTaskStatu
               key={`overlay-column-${activeColumn.id}`}
               column={activeColumn}
               onStatusDelete={() => {}}
+              onStatusEdit={() => {}}
               onTaskClick={() => {}}
             />
           )}
@@ -744,6 +757,14 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, projectId, onTaskStatu
         task={taskDetailsModal.task}
         onClose={() => setTaskDetailsModal({ isOpen: false, task: null })}
         onUpdateTask={handleTaskUpdate}
+      />
+
+      <EditTaskStatusModal
+        isOpen={editStatusModal.isOpen}
+        status={editStatusModal.status}
+        onClose={() => setEditStatusModal({ isOpen: false, status: null })}
+        onStatusUpdated={handleEditStatusUpdated}
+        projectId={projectId}
       />
     </>
   );

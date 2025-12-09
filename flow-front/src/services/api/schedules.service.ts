@@ -229,6 +229,17 @@ export class SchedulesService {
   static async deleteTaskComment(commentId: number): Promise<void> {
     await api.delete(`/tasks/comments/${commentId}`);
   }
+
+  static async updateTaskComment(
+    commentId: number,
+    text: string
+  ): Promise<TaskComment> {
+    const response = await api.patch<TaskComment>(
+      `/tasks/comments/${commentId}`,
+      { text }
+    );
+    return response.data;
+  }
 }
 
 export default SchedulesService;

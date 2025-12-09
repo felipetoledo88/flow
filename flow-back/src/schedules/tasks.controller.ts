@@ -12,6 +12,8 @@ import {
   Request,
   ParseIntPipe,
   NotFoundException,
+  ForbiddenException,
+  BadRequestException,
   UseInterceptors,
   UploadedFile,
 } from '@nestjs/common';
@@ -213,6 +215,39 @@ export class TasksController {
     });
   }
 
+  @Patch('comments/:commentId')
+  async updateTaskComment(
+    @Param('commentId', ParseIntPipe) commentId: number,
+    @Body() updateCommentDto: { text: string },
+    @Request() req,
+  ) {
+    const userId = req.user?.id;
+    const comment = await this.taskCommentRepository.findOne({
+      where: { id: commentId },
+    });
+
+    if (!comment) {
+      throw new NotFoundException('Comment not found');
+    }
+
+    if (comment.userId !== userId) {
+      throw new ForbiddenException('Você só pode editar seus próprios comentários');
+    }
+
+    // Não permite editar comentários que são arquivos
+    if (comment.fileName) {
+      throw new BadRequestException('Não é possível editar comentários de arquivo');
+    }
+
+    comment.text = updateCommentDto.text;
+    const updatedComment = await this.taskCommentRepository.save(comment);
+
+    return this.taskCommentRepository.findOne({
+      where: { id: updatedComment.id },
+      relations: ['user'],
+    });
+  }
+
   @Delete('comments/:commentId')
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteTaskComment(
@@ -229,7 +264,7 @@ export class TasksController {
     }
 
     if (comment.userId !== userId) {
-      throw new Error('You can only delete your own comments');
+      throw new ForbiddenException('Você só pode excluir seus próprios comentários');
     }
 
     await this.taskCommentRepository.softDelete(commentId);

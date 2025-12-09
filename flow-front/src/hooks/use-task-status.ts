@@ -89,15 +89,15 @@ export const useTaskStatus = (projectId?: number) => {
       setIsLoading(true);
       setError(null);
       await TaskStatusService.delete(id);
-      
+
       // Remove da lista local
-      setStatuses(prevStatuses => 
+      setStatuses(prevStatuses =>
         prevStatuses.filter(status => status.id !== id)
       );
-      
+
       // Dispara evento para notificar outros hooks
       window.dispatchEvent(new Event('taskStatusDeleted'));
-      
+
       return {
         success: true,
         message: 'Status excluído com sucesso.'
@@ -107,6 +107,38 @@ export const useTaskStatus = (projectId?: number) => {
       return {
         success: false,
         message: err instanceof Error ? err.message : 'Erro desconhecido ao excluir status'
+      };
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /**
+   * Atualiza o nome de um status
+   */
+  const updateStatus = async (id: number, name: string): Promise<{ success: boolean; message: string }> => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const updatedStatus = await TaskStatusService.update(id, { name });
+
+      // Atualiza na lista local
+      setStatuses(prevStatuses =>
+        prevStatuses.map(status => status.id === id ? updatedStatus : status)
+      );
+
+      // Dispara evento para notificar outros hooks
+      window.dispatchEvent(new Event('taskStatusUpdated'));
+
+      return {
+        success: true,
+        message: 'Status atualizado com sucesso.'
+      };
+    } catch (err) {
+      setError(err as Error);
+      return {
+        success: false,
+        message: err instanceof Error ? err.message : 'Erro desconhecido ao atualizar status'
       };
     } finally {
       setIsLoading(false);
@@ -137,6 +169,7 @@ export const useTaskStatus = (projectId?: number) => {
     getStatusById,
     getStatusId,
     createStatus,
+    updateStatus,
     deleteStatus,
     refreshStatuses,
   };

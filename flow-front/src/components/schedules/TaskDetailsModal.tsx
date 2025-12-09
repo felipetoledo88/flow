@@ -99,6 +99,14 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
   const [editHours, setEditHours] = useState<number>(0);
   const [editComment, setEditComment] = useState<string>('');
 
+  // Estados para edição de comentário
+  const [editingCommentId, setEditingCommentId] = useState<number | null>(null);
+  const [editingCommentText, setEditingCommentText] = useState<string>('');
+
+  // Estados para preview de imagem
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [pendingFilePreview, setPendingFilePreview] = useState<string | null>(null);
+
   // Hook para autenticação
   const { user: currentUser } = useAuth();
 
@@ -117,6 +125,13 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
     if (currentUser.role === 'client') return false;
     if (currentUser.role !== 'user' && currentUser.role !== 'qa') return true;
     return entry.user.id === parseInt(currentUser.id);
+  };
+
+  // Função para verificar se o usuário pode editar/excluir comentário
+  const canEditComment = (comment: TaskComment) => {
+    if (!currentUser) return false;
+    // Só pode editar/excluir comentários próprios
+    return comment.user.id === parseInt(currentUser.id);
   };
 
   // Carregar histórico e comentários quando o modal abrir
@@ -374,27 +389,88 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
   };
 
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file || !task) return;
+    if (!file) return;
+
+    setPendingFile(file);
+
+    // Se for imagem, criar preview
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPendingFilePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    } else {
+      setPendingFilePreview(null);
+    }
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const cancelPendingFile = () => {
+    setPendingFile(null);
+    setPendingFilePreview(null);
+  };
+
+  const confirmFileUpload = async () => {
+    if (!pendingFile || !task) return;
 
     setIsLoading(true);
     try {
-      const fileComment = await SchedulesService.createTaskCommentWithFile(task.id, file);
+      const fileComment = await SchedulesService.createTaskCommentWithFile(task.id, pendingFile);
       setComments([fileComment, ...comments]);
-      
+
       toast({
         title: "Arquivo anexado",
-        description: `${file.name} foi anexado como comentário.`,
+        description: `${pendingFile.name} foi anexado como comentário.`,
       });
 
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
+      setPendingFile(null);
+      setPendingFilePreview(null);
     } catch (error) {
       toast({
         title: "Erro",
         description: "Não foi possível anexar o arquivo.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Funções para edição de comentário
+  const startEditingComment = (comment: TaskComment) => {
+    setEditingCommentId(comment.id);
+    setEditingCommentText(comment.text || '');
+  };
+
+  const cancelEditingComment = () => {
+    setEditingCommentId(null);
+    setEditingCommentText('');
+  };
+
+  const saveEditedComment = async () => {
+    if (!editingCommentId || !editingCommentText.trim()) return;
+
+    setIsLoading(true);
+    try {
+      const updatedComment = await SchedulesService.updateTaskComment(editingCommentId, editingCommentText);
+      setComments(comments.map(c => c.id === editingCommentId ? updatedComment : c));
+      setEditingCommentId(null);
+      setEditingCommentText('');
+
+      toast({
+        title: "Comentário atualizado",
+        description: "O comentário foi atualizado com sucesso.",
+      });
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: "Não foi possível atualizar o comentário.",
         variant: "destructive",
       });
     } finally {
@@ -648,33 +724,87 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
                           {formatDateTime(comment.createdAt)}
                         </span>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeComment(comment.id)}
-                        disabled={isLoading}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
+                      {canEditComment(comment) && (
+                        <div className="flex items-center gap-1">
+                          {!comment.fileName && editingCommentId !== comment.id && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => startEditingComment(comment)}
+                              disabled={isLoading}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeComment(comment.id)}
+                            disabled={isLoading}
+                          >
+                            <Trash2 className="h-4 w-4 text-red-500" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
-                    
+
                     {/* Se for um arquivo */}
                     {comment.fileName ? (
-                      <div className="flex items-center gap-2 text-sm">
-                        <Paperclip className="h-4 w-4 text-gray-500" />
-                        <span className="font-medium">{comment.fileName}</span>
-                        <span className="text-xs text-gray-500">
-                          ({comment.mimeType}) - {comment.fileSize ? (comment.fileSize / (1024 * 1024)).toFixed(1) : '0'} MB
-                        </span>
-                        {comment.fileUrl && (
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            onClick={() => downloadFile(comment.fileUrl!, comment.fileName!)}
-                          >
-                            <Download className="h-4 w-4" />
-                          </Button>
+                      <div className="space-y-2">
+                        {/* Preview de imagem se for imagem */}
+                        {comment.mimeType?.startsWith('image/') && comment.fileUrl && (
+                          <div className="relative max-w-xs">
+                            <img
+                              src={`${import.meta.env.VITE_API_BASE_URL}${comment.fileUrl}`}
+                              alt={comment.fileName}
+                              className="rounded-lg max-h-40 object-contain cursor-pointer hover:opacity-90"
+                              onClick={() => downloadFile(comment.fileUrl!, comment.fileName!)}
+                            />
+                          </div>
                         )}
+                        <div className="flex items-center gap-2 text-sm">
+                          <Paperclip className="h-4 w-4 text-gray-500" />
+                          <span className="font-medium">{comment.fileName}</span>
+                          <span className="text-xs text-gray-500">
+                            ({comment.mimeType}) - {comment.fileSize ? (comment.fileSize / (1024 * 1024)).toFixed(2) : '0'} MB
+                          </span>
+                          {comment.fileUrl && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => downloadFile(comment.fileUrl!, comment.fileName!)}
+                            >
+                              <Download className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ) : editingCommentId === comment.id ? (
+                      <div className="space-y-2">
+                        <Textarea
+                          value={editingCommentText}
+                          onChange={(e) => setEditingCommentText(e.target.value)}
+                          className="min-h-[60px]"
+                          disabled={isLoading}
+                        />
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            onClick={saveEditedComment}
+                            disabled={isLoading || !editingCommentText.trim()}
+                          >
+                            <Save className="h-4 w-4 mr-1" />
+                            Salvar
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={cancelEditingComment}
+                            disabled={isLoading}
+                          >
+                            Cancelar
+                          </Button>
+                        </div>
                       </div>
                     ) : (
                       <p className="text-sm">{comment.text}</p>
@@ -682,6 +812,62 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
                   </div>
                 ))}
               </div>
+
+              {/* Preview de arquivo pendente */}
+              {pendingFile && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      {pendingFilePreview ? (
+                        <div className="mb-2">
+                          <img
+                            src={pendingFilePreview}
+                            alt={pendingFile.name}
+                            className="rounded-lg max-h-32 object-contain"
+                          />
+                        </div>
+                      ) : null}
+                      <div className="flex items-center gap-2 text-sm">
+                        <Paperclip className="h-4 w-4 text-blue-500" />
+                        <span className="font-medium">{pendingFile.name}</span>
+                        <span className="text-xs text-gray-500">
+                          ({(pendingFile.size / (1024 * 1024)).toFixed(2)} MB)
+                        </span>
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={cancelPendingFile}
+                      disabled={isLoading}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="flex gap-2 mt-2">
+                    <Button
+                      size="sm"
+                      onClick={confirmFileUpload}
+                      disabled={isLoading}
+                    >
+                      {isLoading ? (
+                        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                      ) : (
+                        <Send className="h-4 w-4 mr-1" />
+                      )}
+                      Enviar
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={cancelPendingFile}
+                      disabled={isLoading}
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                </div>
+              )}
 
               {/* Novo comentário */}
               <div className="space-y-2">
@@ -702,19 +888,19 @@ const TaskDetailsModal: React.FC<TaskDetailsModalProps> = ({
                     variant="outline"
                     size="sm"
                     onClick={() => fileInputRef.current?.click()}
-                    disabled={isLoading}
+                    disabled={isLoading || !!pendingFile}
                   >
                     <Paperclip className="h-4 w-4 mr-2" />
                     Anexar Arquivo
                   </Button>
                 </div>
               </div>
-              
+
               <input
                 ref={fileInputRef}
                 type="file"
                 className="hidden"
-                onChange={handleFileUpload}
+                onChange={handleFileSelect}
               />
             </div>
           </div>
