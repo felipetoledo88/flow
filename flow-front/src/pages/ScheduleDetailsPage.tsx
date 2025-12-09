@@ -85,6 +85,7 @@ import DashboardVelocityChart from '@/components/dashboard/DashboardVelocityChar
 import { useDashboardData } from '@/hooks/useDashboardData';
 import { useDashboardCalculations } from '@/hooks/useDashboardCalculations';
 import { useProjectStore } from '@/stores/project/project.store';
+import { getStatusColorsFromEntity } from '@/utils/status-colors';
 
 const ScheduleDetailsPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -756,13 +757,12 @@ const ScheduleDetailsPage = () => {
   };
 
   const getStatusColors = (status: ScheduleTask['status']) => {
-    const variants: Record<string, { bg: string; text: string; border: string }> = {
-      todo: { bg: 'bg-gray-100', text: 'text-gray-800', border: 'border-gray-200' },
-      in_progress: { bg: 'bg-blue-100', text: 'text-blue-800', border: 'border-blue-200' },
-      blocked: { bg: 'bg-red-100', text: 'text-red-800', border: 'border-red-200' },
-      completed: { bg: 'bg-green-100', text: 'text-green-800', border: 'border-green-200' },
+    const colors = getStatusColorsFromEntity(status);
+    return {
+      bg: colors.bg,
+      text: colors.text,
+      border: colors.border,
     };
-    return variants[status.code] || variants.todo;
   };
 
   const getTeamMembers = () => {
