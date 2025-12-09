@@ -1,0 +1,18 @@
+volumes:
+  postgres-nx-flow:
+    driver: local
+
+services:
+  postgres-nx-flow:
+    container_name: postgres-nx-flow
+    image: postgres:17-alpine
+    restart: unless-stopped
+    volumes:
+      - postgres-nx-flow:/var/lib/postgresql/data
+    ports:
+      - "5444:5432"
+    environment:
+      POSTGRES_DB: nx_flow
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+  

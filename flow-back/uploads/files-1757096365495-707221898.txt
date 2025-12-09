@@ -1,0 +1,1833 @@
+﻿Padrão do plano de fundo  Descrição gerada automaticamente 
+
+
+
+
+
+        
+
+
+
+
+
+
+
+
+
+
+
+
+ Logotipo  Descrição gerada automaticamente 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Sumário
+VISÃO GERAL DO PROJETO        3
+OBJETIVOS PRINCIPAIS        3
+CONSIDERAÇÕES TÉCNICAS        4
+TECNOLOGIAS        4
+1. Stack Tecnológica Definida        5
+2. Arquitetura de Referência        7
+FUNCIONALIDADES        12
+1. Login        12
+2. Gerenciamento de Permissões e Acessos        13
+3. Cadastro de Usuários        14
+4. Cadastro de Servidores        15
+5. Cadastro de Produtor Rural        17
+6. Cadastro de Propriedade        18
+7. Cadastro de Laticínio        19
+8. Cadastro de Laboratórios        20
+9. Cadastro de Tipo de Exploração        21
+10. Cadastro de Animais        22
+11. Cadastro de Veterinários        23
+12. Cadastro de Vacinas        24
+13. Cadastro de Ensaios (tipos de exames)        25
+14. Controle de produção de leite (Pool)        26
+15. Atestado de conformidade        27
+16. Resultados de Ensaios/Exames laboratoriais        28
+17. Dashboard        29
+18. Controle de Vacinação        30
+19. Consumo ou disponibilização de Serviços        31
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Projeto Controle de vacinas e exames - ADAPAR
+
+
+VISÃO GERAL DO PROJETO
+Este documento tem como objetivo especificar os requisitos funcionais e não funcionais do novo sistema informatizado da ADAPAR (Agência de Defesa Agropecuária do Paraná), voltado para o controle sanitário e rastreabilidade de rebanhos bovinos com foco nos processos de vacinação, exames laboratoriais, fornecimento de leite e emissão de atestados de conformidade.
+A solução visa garantir a conformidade com as Portarias ADAPAR nº 132/2017 e nº 133/2017, além de atender às exigências operacionais e legais relacionadas ao controle da brucelose e tuberculose bovina, cujos exames e vacinação são obrigatórios e precisam ser rastreados por animal.
+O sistema será desenvolvido para operar de forma integrada com os demais sistemas, oferecendo serviços REST autenticados via OAuth2, permitindo o envio e recebimento de dados entre laboratórios, laticínios, veterinários e demais entes envolvidos.
+
+
+OBJETIVOS PRINCIPAIS
+O sistema terá como principais objetivos:
+* Receber registros de vacinação e exames laboratoriais, garantindo a rastreabilidade por animal;
+* Emitir atestados de conformidade sanitária, com base no conjunto de dados de cada propriedade e seus criadores vinculados;
+* Permitir a consulta da situação sanitária dos rebanhos por parte da ADAPAR e dos laticínios;
+* Alertar automaticamente casos de inconformidade por falta de dados, exames ou vacinas, via dashboard e e-mail;
+* Manter atualizado o rebanho bovino das propriedades, com exigência de atualização de acordo com os ensaios cadastrados onde o período de tempo será dinâmico;
+* Apoiar o processo de pagamento de leite por parte dos laticínios, fornecendo a situação de conformidade dos criadores;
+* Gerar relatórios e dashboards com indicadores sanitários e operacionais para uso técnico e gerencial da ADAPAR.
+* Permitir cadastro de usuários e perfis de acesso (ADAPAR, Laboratórios, Veterinários, Laticínios);
+* Configuração de ensaios laboratoriais e regras de alerta por tipo de exame;
+* Serviços REST para recebimento de exames laboratoriais (Base64) e registros de vacinação;
+* Painel de acompanhamento com indicadores de inconformidade e casos positivos;
+* Consulta de propriedades, criadores, animais, laboratórios, laticínios e veterinários (via integração);
+* Vínculo entre criador, laboratório, propriedade, tipo de exploração e fornecimento;
+* Controle de rebanho com exigência de atualização conforme as parametrizações de período cadastradas para cada ensaio e vacina;
+* Gestão de pool de criadores por laticínios, com possibilidade de configurar e consultar via API;
+* Emissão e consulta de atestados (conformidade e aptidão de responsável veterinário);
+* Integração com sistemas externos da ADAPAR em ambiente de homologação e produção.
+
+
+CONSIDERAÇÕES TÉCNICAS
+* Toda comunicação entre sistemas deverá ocorrer via serviços REST, com autenticação OAuth2 e documentação padrão OpenAPI (Swagger) disponibilizado no link: https://www.sdsa.adapar.pr.gov.br/sdsa/doc/index.html 
+* Os dados serão integrados de forma ativa e passiva, possibilitando que a ADAPAR também consulte sistemas de terceiros.
+* Serão implementadas rotinas automáticas (CRON) para verificação de conformidade, com alertas por e-mail para laticínios e ADAPAR em caso de pendências ou falhas de envio.
+* Os dados sensíveis deverão ser criptografados e todas as operações auditadas.
+* O sistema terá um ambiente de homologação para validação e testes integrados antes da publicação oficial. 
+TECNOLOGIAS 
+O objetivo desta fase é estabelecer uma base sólida de tecnologias e diretrizes arquiteturais que nortearão as etapas subsequentes de design, desenvolvimento, testes e implantação. A seleção das tecnologias considerou critérios como maturidade, comunidade de suporte, escalabilidade, segurança, performance e a familiaridade da equipe de desenvolvimento potencial. Este documento serve como um artefato vivo, sujeito a refinamentos conforme o projeto evolui e novos requisitos ou restrições emergem. A clareza na definição da stack e da arquitetura inicial é crucial para garantir a coesão técnica, facilitar a integração entre componentes e mitigar riscos tecnológicos em fases posteriores.
+Os principais objetivos técnicos que guiaram a seleção da stack e a definição da arquitetura preliminar são: 
+* Escalabilidade e Robustez: Garantir que a aplicação cresça com segurança e performance, utilizando orquestração com Kubernetes e deploy em ambientes escaláveis como Azure App Service, AWS EC2 ou Google App Engine.
+* Segurança: Implementar mecanismos de autenticação e autorização seguros para proteger os dados e as funcionalidades contra acessos não autorizados. Aplicar autenticação e autorização com JWT, controle por roles e regras de IAM nos ambientes de nuvem, além de HTTPS com certificados SSL de renovação automática.
+* Experiência de Usuário Moderna: Interface responsiva, ágil e adaptável a diferentes tamanhos de tela e dispositivos (desktops, tablets, smartphones), construída com React 19, Vite 5 e Tailwind CSS.
+* Manutenibilidade e Evolução: A arquitetura e o código devem ser modulares com testes automatizados, desenvolvimento orientado a testes (TDD), versionamento claro e documentação interativa via Swagger/OpenAPI., bem documentados e seguir padrões de desenvolvimento que simplifiquem futuras manutenções, correções e a adição de novas funcionalidades. 
+* Eficiência no Desenvolvimento: Utilizar ferramentas e frameworks que aumentem a produtividade da equipe, permitam a automação de testes e facilitem a integração e entrega contínua (CI/CD) configurado com GitHub Actions, GitLab CI ou Jenkins, garantindo entregas contínuas e consistentes.
+* Integração com Sistemas Externos: Disponibilizar uma documentação de API REST completa e interativa para facilitar a integração com o frontend e potenciais sistemas externos.
+* Gestão de Dados e Infraestrutura: Banco de dados MySQL 8+ em serviços gerenciados (RDS, Aurora, Cloud SQL), armazenamento via S3/Blob e infraestrutura provisionada com VPC, sub-redes, firewall rules, NAT Gateway, VPN, DNS e bucket GCS/Azure Blob.
+
+
+1. Stack Tecnológica Definida
+A stack tecnológica selecionada para este projeto visa atender aos objetivos técnicos descritos anteriormente, combinando tecnologias maduras, robustas e com amplo suporte da comunidade. A seguir, detalhamos os componentes escolhidos para cada camada da aplicação:
+   1. BackEnd
+O backend será responsável pela lógica de negócios, persistência de dados e exposição de APIs RESTful para consumo pelo frontend e, potencialmente, por outros sistemas.
+* Linguagem: Java 21 a 24. A escolha do Java, em sua versão mais recente, se justifica pela sua robustez, performance comprovada, vasto ecossistema de bibliotecas e frameworks, e pela grande disponibilidade de desenvolvedores qualificados. As versões mais recentes do Java trazem melhorias contínuas de desempenho e novas funcionalidades que podem ser aproveitadas. 
+* Framework Principal: Spring Boot 3. O Spring Boot simplifica drasticamente o desenvolvimento de aplicações Spring, oferecendo configuração automática, gerenciamento de dependências simplificado e um servidor embarcado. Sua arquitetura modular facilita a criação de microsserviços ou aplicações monolíticas bem estruturadas.
+   * Spring Web: Será utilizado para a construção das APIs RESTful, aproveitando recursos como o mapeamento de requisições, tratamento de exceções e serialização/desserialização de dados (JSON). 
+   * Spring Security: Módulo essencial para a implementação da segurança da aplicação. Será configurado para prover autenticação baseada em JSON Web Tokens (JWT) e controle de acesso baseado em papéis (roles) ou permissões. 
+   * Spring Data JPA: Facilitará a interação com o banco de dados, abstraindo a complexidade do acesso a dados e implementando o padrão de repositório. Utilizará o Hibernate como provedor JPA padrão.
+* Ferramenta de Build: Maven. Maven é a ferramenta padrão para gerenciamento do ciclo de vida e dependências em projetos Java, garantindo consistência no processo de build e facilitando a integração com ferramentas de CI/CD.
+* Documentação da API: OpenAPI (Swagger). A especificação OpenAPI será utilizada para documentar as APIs REST. A integração com o Spring Boot (via springdoc-openapi ou similar) permitirá a geração automática da documentação interativa (Swagger UI), facilitando o entendimento e o consumo da API pelo time de frontend e outros stakeholders.
+* Autenticação: JWT (JSON Web Tokens). JWT será o mecanismo padrão para autenticação stateless entre o frontend e o backend. Após o login, o backend emitirá um token JWT que o frontend enviará em cada requisição subsequente para acessar recursos protegidos.
+* Integração HTTP e Monitoramento: Monitoramento de requisições com JTA, interceptadores e auditoria de dados
+* Testes: JUnit, Mockito, desenvolvimento orientado a testes (TDD)
+* Build Tool: Maven.
+* Conteinerização: Docker (imagens, push para container registry), orquestração via Kubernetes, suporte a serviços como Azure Kubernetes Service (AKS), GKE, Portainer, AppEngineFlex
+* Validação: Bean Validation (Jakarta Bean Validation). Utilizaremos as anotações padrão do Bean Validation (sucessor do javax.validation ) para validar os dados de entrada nas camadas de Controller e Service, garantindo a integridade e consistência dos dados antes do processamento ou persistência.
+
+
+   2. FrontEnd
+A camada de frontend será responsável pela interface com o usuário (UI) e pela experiência do usuário (UX), consumindo as APIs disponibilizadas pelo backend.
+* Framework: React 19. Biblioteca moderna para construção de interfaces web interativas e escaláveis, baseada em componentes reutilizáveis.
+* Build Tool: Vite 5. Ferramenta de build rápida e eficiente, ideal para projetos modernos em React com recarregamento instantâneo durante o desenvolvimento.
+* Estilização e Responsividade: Tailwind CSS. Framework de utilitários CSS que facilita a criação de interfaces responsivas e com design consistente.
+* Gerenciador de Pacotes: npm. Sistema para instalar e gerenciar dependências do projeto frontend com ampla compatibilidade no ecossistema JavaScript.
+* Autenticação: Armazena o token JWT localmente e o envia no cabeçalho Authorization em requisições para APIs protegidas.
+* Acessibilidade: Interface desenvolvida seguindo padrões WAI-ARIA, garantindo acesso inclusivo a todos os usuários.
+* Integração com Backend: Utiliza axios ou fetch com interceptors para autenticação, tratamento de erros e logs de requisições.
+
+
+   3. Banco de dados
+A camada de persistência armazenará os dados da aplicação de forma segura e eficiente.
+* Sistema Gerenciador de Banco de Dados (SGBD): MySQL 8+ (RDS, Aurora, Cloud SQL). MySQL é um SGBD relacional open-source amplamente utilizado, conhecido por sua confiabilidade, performance e facilidade de uso. 
+* Mapeamento Objeto-Relacional (ORM): JPA com Hibernate.  Camada de mapeamento objeto-relacional usada no backend para facilitar o acesso e manipulação dos dados no MySQL.
+* Storage: S3, GCS ou Azure Blob: Armazenamento em nuvem de arquivos estáticos e documentos, com integração segura e escalável à aplicação..
+
+
+2. Arquitetura de Referência
+A arquitetura proposta segue um modelo cliente-servidor, com uma separação clara entre as responsabilidades do frontend (apresentação e interação com o usuário) e do backend (lógica de negócios, segurança e persistência de dados). A comunicação entre as duas camadas será feita através de uma API RESTful segura.
+   4. Visão Geral
+* Frontend (SPA): React hospedado como aplicação estática via S3+CloudFront, Azure Blob+CDN ou AppEngine
+* Backend (API): Spring Boot empacotado como JAR, deploy em App Service (Azure), EC2 (AWS) ou App Engine (Google)
+* Banco de Dados: MySQL 8 em instância gerenciada com backups, escalabilidade e failover.
+* Comunicação: REST/HTTP com payloads em JSON e segurança por JWT
+* Infraestrutura:
+   * Criação e configuração de: VPC, sub-redes, firewall rules, NAT gateway, DNS, VPN.
+   * Bucket GCS/Azure Blob
+   * Pipeline CI/CD com GitHub Actions, GitLab CI ou Jenkins
+   * Armazenamento de imagens Docker em registries (DockerHub, GitHub Packages, etc.)
+
+
+   5. Arquitetura do Backend (Spring Boot)
+O backend seguirá uma arquitetura em camadas clássica para aplicações Spring, promovendo separação de conceitos e testabilidade:
+* Camada de Controle (Controller): Responsável por receber as requisições HTTP, validar os dados de entrada (usando Bean Validation), extrair parâmetros e chamar os serviços apropriados. Utilizará o Spring Web para mapear endpoints REST. 
+* Camada de Serviço (Service): Contém a lógica de negócios principal da aplicação. Orquestra chamadas aos repositórios e pode interagir com outros serviços. Transações de banco de dados geralmente são gerenciadas nesta camada (usando @Transactional do Spring). 
+* Camada de Acesso a Dados (Repository): Responsável pela interação com o banco de dados. Utilizará interfaces do Spring Data JPA, que abstraem a implementação das operações CRUD e consultas customizadas. 
+* Camada de Domínio (Entities/DTOs): Define as entidades JPA que mapeiam as tabelas do banco de dados e os Data Transfer Objects (DTOs) usados para transferir dados entre as camadas e na API, evitando expor diretamente às entidades. 
+* Segurança (Spring Security): Configurada para interceptar requisições, validar tokens JWT, carregar detalhes do usuário e aplicar regras de autorização nos endpoints.
+
+
+   6. Arquitetura do Frontend (Angular)
+O frontend seguirá a arquitetura padrão do Angular, baseada em componentes e serviços:
+* Componentes (Components): Unidades reutilizáveis de interface que combinam lógica, estrutura (JSX) e estilo (com Tailwind CSS), promovendo modularidade e manutenção facilitada.
+* Estrutura Modular: O projeto será organizado em diretórios funcionais, como auth/, user/, products/, contendo seus respectivos componentes, hooks e serviços.
+* Hooks e Serviços (Hooks/Services): Hooks personalizados e funções utilitárias serão utilizados para encapsular lógica de negócios e integração com a API, como autenticação, chamadas HTTP e gerenciamento de estado.
+* Roteamento (Routing): O React Router será usado para controlar a navegação entre páginas e componentes da SPA, com suporte a rotas protegidas.
+* Proteção de Rotas (Guards): Rotas serão protegidas por wrappers de autenticação (ex: PrivateRoute) que verificam se o usuário está autenticado e autorizado antes de acessar determinadas páginas.
+* Interceptors: Serão utilizados interceptors com Axios para incluir automaticamente o token JWT no cabeçalho das requisições, além de tratar erros de forma centralizada e realizar logging ou redirecionamentos conforme necessário..
+
+
+   7.  Fluxo de Autenticação (JWT)
+      1. O usuário envia credenciais (e.g., email/senha) através de um formulário de login no frontend. 
+      2. O frontend envia as credenciais para um endpoint específico de autenticação no backend (e.g., /api/auth/login ). 
+      3. O backend valida as credenciais contra o banco de dados. 
+      4. Se as credenciais forem válidas, o backend gera um token JWT contendo informações do usuário (como ID, papéis) e uma data de expiração. 
+      5. O backend retorna o token JWT para o frontend. 
+      6. O frontend armazena o token JWT de forma segura (e.g., localStorage ). 
+      7. Para cada requisição subsequente a endpoints protegidos, o frontend inclui o token JWT no cabeçalho Authorization (e.g., Authorization: Bearer ). 
+      8. O backend (via Spring Security) intercepta a requisição, valida a assinatura e a expiração do token JWT. 
+      9. Se o token for válido, o backend processa a requisição; caso contrário, retorna um erro de não autorizado (401).
+   8. Integração e API
+A comunicação será baseada em REST sobre HTTP/S. A documentação OpenAPI (Swagger) gerada pelo backend será fundamental para que a equipe de frontend compreenda e utilize corretamente os endpoints disponíveis, incluindo modelos de dados (DTOs), parâmetros esperados e códigos de status de resposta.
+   9. Considerações Iniciais sobre Implantação (Deployment)
+Embora a escolha do provedor de nuvem e a estratégia detalhada de CI/CD sejam definidas posteriormente, a arquitetura prevê:
+* Backend: Empacotado como JAR executável via Spring Boot e Maven, conteinerizado com Docker, e implantado em serviços como Azure App Service, AWS EC2 com ECS ou Google App Engine. Também pode ser orquestrado via Kubernetes (GKE, AKS, EKS).
+* Frontend: Aplicação React compilada via Vite em arquivos estáticos (HTML, CSS, JS) e servida por serviços de hospedagem estática como AWS S3 + CloudFront, Azure Blob Storage + CDN ou Google Cloud Storage.
+* Banco de Dados: Utilização de banco MySQL 8+ em serviços gerenciados na nuvem como AWS RDS, Amazon Aurora ou Google Cloud SQL, com foco em disponibilidade, backup e escalabilidade..
+
+
+   10. Ambiente de Desenvolvimento
+Recomenda-se a seguinte configuração para os desenvolvedores:
+* Backend: 
+   * JDK 21 a 24
+   * Maven
+   * IDEs como IntelliJ IDEA, Eclipse ou VS Code com extensões Java
+   * Docker para execução local de banco MySQL e testes com containers
+
+   * Frontend:
+   * Node.js (versão LTS compatível com React 19)
+   * npm
+   * Vite 5 como ferramenta de build
+   * Tailwind CSS para estilização
+   * VS Code recomendado como editor principal
+
+      * Controle de Versão: Git, com repositório centralizado em plataformas como GitHub, GitLab ou Bitbucket
+
+
+      11. Requisitos Não Funcionais Preliminares
+Além dos requisitos funcionais (que serão detalhados em documento específico), alguns requisitos não funcionais são cruciais desde o início e influenciam as escolhas tecnológicas e arquiteturais:
+      * Performance: A aplicação deve apresentar tempos de resposta ágeis para interações e processamento de dados. Espera-se resposta inferior a 1 segundo para operações interativas comuns. O uso de React com Vite e banco em nuvem contribui para essa meta.
+      * Escalabilidade: A arquitetura deve suportar crescimento em volume de dados e número de usuários. O backend conteinerizado com Docker e orquestrado por Kubernetes, bem como banco de dados em serviços gerenciados, já prevêem esse crescimento. Estratégias como balanceamento de carga e escalonamento horizontal devem ser aplicadas.
+      * Disponibilidade: O sistema deve garantir alta disponibilidade com mínima indisponibilidade não planejada. Adoção de práticas como blue-green deployment ou canary releases será considerada na configuração da infraestrutura.
+      * Segurança: Além da autenticação/autorização com JWT, devem ser implementadas medidas contra ataques como XSS, CSRF, SQL Injection, além do uso obrigatório de HTTPS e práticas de auditoria. Regras de IAM, controle de acesso por perfil e renovação automática de certificados SSL fazem parte da estratégia.
+      * Manutenibilidade: O código deve ser modular, bem documentado, com cobertura de testes, seguindo convenções de estilo como Google Java Style Guide (backend) e React/JSX Style Guide (frontend), com atenção a boas práticas de TDD.
+      * Usabilidade: A interface deve ser responsiva, acessível e fácil de usar, construída com React + Tailwind, seguindo princípios de UX e diretrizes WAI-ARIA para acessibilidade.
+
+
+      12. Estratégias Iniciais de Qualidade e Operação
+Embora os planos detalhados de teste e operação sejam elaborados posteriormente, algumas diretrizes iniciais são importantes:
+      * Testes unitários: JUnit/Mockito no backend e Jest/Testing Library no frontend.
+      * Testes de integração: Spring Boot Test, REST Assured ou Postman.
+      * Testes end-to-end: Cypress será a ferramenta recomendada para simular fluxos completos de usuário.
+      * A cobertura de código será monitorada e utilizada como métrica de qualidade.
+      * Logging: Utilizar SLF4J com Logback/Log4j2 no backend, e bibliotecas ou serviços integrados no frontend (ex: Sentry ou LogRocket). Logs centralizados (ex: ELK Stack ou serviços como AWS CloudWatch ou Azure Monitor) facilitarão análises em produção.
+      * Monitoramento: O sistema deve ser monitorado continuamente com ferramentas como Spring Boot Actuator + Micrometer, Prometheus/Grafana, ou APMs do provedor de nuvem. Serão monitorados: uso de recursos, tempos de resposta, erros e integridade da aplicação.
+
+
+      13. Próximos Passos
+Com base neste levantamento inicial, os próximos passos incluem o detalhamento dos requisitos funcionais, o design da interface do usuário (wireframes/mockups), Modelagem do banco de dados e design das APIs. Prototipação das interfaces (mockups/wireframes). Implantação dos ambientes de desenvolvimento/teste/homologação. Configuração dos pipelines CI/CD e provisionamento da infraestrutura cloud. Definição entre GCS/Azure Blob como storage e entre AppEngine/Azure App Service/EC2 como plataforma de backend.
+
+
+FUNCIONALIDADES
+      1. Login
+Permite o acesso ao sistema por meio de autenticação com login e senha. Acesso autorizado apenas para usuários cadastrados e ativos. Contém mecanismo de recuperação de senha via e-mail.
+      1. Especificação de Campos
+Campo
+	Tipo
+	Obrigatório
+	Observações
+	Login
+	Alfanumérico
+	Sim
+	Identificação única do usuário
+	Senha
+	Alfanumérico
+	Sim
+	Campo mascarado, com opção de visualização temporária
+	Botão "Login"
+	Botão
+	-
+	Aciona a tentativa de autenticação
+	Esqueci a Senha
+	Link
+	-
+	Envia link de redefinição de senha por e-mail
+	
+
+      2. Requisitos Funcionais
+Código
+	Requisito
+	Descrição
+	RF01
+	Autenticação de acesso
+	Permitir login somente de usuários ativos com credenciais válidas.
+	RF02
+	Máscara de senha
+	Apresentar senha como caracteres ocultos, com botão de visualização.
+	RF03
+	Recuperação de senha
+	Disponibilizar link para envio de redefinição de senha via e-mail.
+	RF04
+	Controle de acesso por perfil
+	Após o login, direcionar permissões conforme o perfil do usuário.
+	RF05
+	Mensagem de erro
+	Exibir mensagem clara quando login ou senha forem inválidos.
+	RF06
+	Login SSO
+	Permite logar utilizando SSO.
+	
+
+      3. Requisitos Não Funcionais
+Código
+	Requisito
+	Descrição
+	RNF01
+	Segurança de dados
+	A senha deve ser armazenada de forma criptografada no banco.
+	RNF02
+	Tempo de resposta
+	A tentativa de login deve retornar resposta em até 3 segundos.
+	RNF03
+	Proteção contra ataque
+	Implementar limite de tentativas e bloqueio por IP após falhas consecutivas.
+	
+
+
+
+      2. Gerenciamento de Permissões e Acessos
+Funcionalidade para criação e manutenção de perfis de acesso ao sistema, definindo quais telas e ações cada perfil poderá executar.
+      4. Especificação de campos
+Campo
+	Tipo
+	Obrigatório
+	Observações
+	Perfil
+	Texto
+	Sim
+	Nome ou descrição do perfil
+	Acessos
+	Seleção
+	Sim
+	Lista de telas disponíveis no sistema
+	Ações
+	Seleção
+	Sim
+	Permissões por tela (Incluir, Alterar, Visualizar, etc)
+	Status
+	Ativo/Inativo
+	Sim
+	Define se o perfil está disponível para novos usuários
+	
+
+      5. Requisitos Funcionais
+Código
+	Requisito
+	Descrição
+	RF01
+	Criar perfil
+	Permitir criar novo perfil com acessos e ações definidos.
+	RF02
+	Editar perfil
+	Permitir editar os dados de um perfil existente.
+	RF03
+	Inativar perfil
+	Permitir apenas inativar perfis, não excluir permanentemente.
+	RF04
+	Permissão por ação
+	Permitir definir ações (Incluir, Editar, Excluir) para cada tela atribuída ao perfil.
+	
+
+      6. Requisitos Não funcionais
+Código
+	Requisito
+	Descrição
+	RNF01
+	Perfis dinâmicos
+	Deve ser possível criar qualquer combinação de permissões.
+	RNF02
+	Controle de histórico
+	Registrar quem criou ou editou cada perfil e quando.
+	
+
+      3. Cadastro de Usuários
+Permite cadastrar e manter usuários do sistema. Cada usuário é vinculado a um perfil de acesso, responsável por determinar suas permissões.
+Os laticínios também podem ter usuários cadastrados para possibilitar a inserção de dados.
+      7. Especificação de campos
+Campo
+	Tipo
+	Obrigatório
+	Observações
+	Identificador
+	Numérico
+	Sim
+	Gerado automaticamente pelo sistema
+	Nome
+	Alfanumérico
+	Sim
+	Nome completo do usuário
+	CPF
+	Texto
+	Sim
+	Campo único, com validação de formato
+	E-mail
+	Alfanumérico
+	Sim
+	Usado para login, notificações e recuperação de senha
+	Telefone
+	Numérico
+	Sim
+	Permite informar o telefone de contato do usuário
+	Senha
+	Alfanumérico
+	Sim
+	Armazenada criptografada; não exibida na interface
+	Status
+	Ativo/Inativo
+	Sim
+	Define se o usuário pode acessar o sistema
+	Perfil
+	Seleção
+	Sim
+	Selecionar entre os perfis cadastrados e ativos
+	Unidade
+	Seleção
+	Sim
+	Informa a qual unidade da Adapar o usuário está relacionado.
+	
+
+      8. Requisitos Funcionais
+Código
+	Requisito
+	Descrição
+	RF01
+	Cadastro de novo usuário
+	Permitir criar usuário com validação de CPF e login únicos.
+	RF02
+	Validação de dados
+	Validar CPF e e-mail no momento do cadastro.
+	RF03
+	Envio de link para senha
+	Ao cadastrar, enviar e-mail com link de criação de senha.
+	RF04
+	Edição de dados
+	Permitir editar dados, exceto CPF.
+	RF05
+	Inativação de usuário
+	Permitir inativar, mas não excluir usuários.
+	
+
+      9. Requisitos Não funcionais
+Código
+	Requisito
+	Descrição
+	RNF01
+	Armazenamento seguro
+	Senhas devem ser criptografadas no banco de dados.
+	RNF02
+	Controle de duplicidade
+	Impedir criação com CPF ou login repetido.
+	RNF03
+	Log de alterações
+	Registrar todas as alterações feitas no cadastro de usuários.
+	
+
+
+
+      4. Cadastro de Servidores
+Nessa funcionalidade será permitido o cadastro e gerenciamento dos servidores da Adapar, estes que são responsáveis pelas auditorias e demais serviços prestados.
+      10. Especificação de campos
+Campo
+	Tipo
+	Obrigatório
+	Observações
+	Identificador
+	Numérico
+	Sim
+	Gerado automaticamente pelo sistema
+	Nome
+	Texto
+	Sim
+	
+
+	CPF
+	Texto
+	Sim
+	
+
+	E-mail
+	Texto
+	Sim
+	
+
+	Telefone
+	Texto
+	Sim
+	
+
+	Matrícula
+	Texto
+	Sim
+	
+
+	Cargo
+	Seleção
+	Não
+	Campo de seleção para relacionar o cargo a qual o servidor representa
+	Unidade
+	Seleção
+	Sim
+	Campo de seleção para relacional qual a unidade da Adapar que o servidor pertence
+	Status
+	Ativo/Inativo
+	Sim
+	
+
+	
+
+      11. Requisitos Funcionais
+Código
+	Requisito
+	Descrição
+	RF01
+	Cadastro de novo servidor
+	Permitir criar usuário com validação de CPF único.
+	RF02
+	Validação de dados
+	Validar CPF e e-mail no momento do cadastro.
+	RF03
+	Envio de link para senha
+	Ao cadastrar, enviar e-mail com link de criação de senha.
+	RF04
+	Edição de dados
+	Permitir editar dados, exceto CPF.
+	RF05
+	Ativação e inativação de servidor
+	Permitir ativar e inativar um servidor cadastrado.
+	RF06
+	Relacionar unidade
+	Permitir que seja relacionado as unidades de trabalho da Adapar ao servidor
+	RF07
+	Relacionar cargo
+	Permitir relacionar o cargo ao servidor.
+	
+
+      12. Requisitos Não funcionais
+Código
+	Requisito
+	Descrição
+	RNF01
+	Controle de duplicidade
+	Impedir criação com CPF ou login repetido.
+	RNF02
+	Log de alterações
+	Registrar todas as alterações feitas no cadastro de usuários.
+	
+
+
+
+      5. Cadastro de Produtor Rural
+Permite a visualização de informações de produtores rurais do Estado, responsáveis por propriedades agrícolas ou leiteiras. O produtor pode estar vinculado a uma ou mais propriedades. 
+Os dados de produtores serão recebidos através de integração via API com o sistema interno da Adapar e serão disponibilizados somente leitura nesse escopo.
+      13. Especificação de campos
+Campo
+	Tipo
+	Obrigatório
+	Observações
+	CPF ou CNPJ
+	Texto
+	Sim
+	Validar estrutura e unicidade
+	Nome/Razão Social
+	Texto
+	Sim
+	Nome completo ou razão social
+	Endereço
+	Texto longo
+	Sim
+	Informar endereço completo
+	Município
+	Seleção
+	Sim
+	Selecionar da lista de municípios
+	UF
+	Seleção
+	Sim
+	
+
+	E-mail
+	Texto
+	Não
+	Usado para contato e notificações
+	Telefone
+	Texto
+	Não
+	Usado para contato
+	Propriedades
+	Multi seleção
+	Não
+	Permite a visualização de todas as propriedades que o produtor está vinculado
+	Tipo de exploração
+	Multi seleção
+	Não
+	Vinculado em cada propriedade, o tipo de exploração que é praticado.
+	Status
+	Ativo/Inativo
+	Sim
+	Define se pode ser vinculado a propriedades
+	
+
+      14. Requisitos Funcionais
+Código
+	Requisito
+	Descrição
+	RF01
+	visualizar dados de produtor
+	Permitir acesso aos dados de cadastro de produtor de acordo com o perfil de acesso do usuário logado
+	RF02
+	Visualizar propriedades
+	Deve permitir visualizar todas as propriedades que o produtor está vinculado, assim como o tipo de exploração em cada uma.
+	
+
+      15. Requisitos Não Funcionais
+Código
+	Requisito
+	Descrição
+	RNF01
+	Integração com sistemas.
+	O sistema deve receber os dados via API.
+	RNF02
+	Logs
+	Registrar data, e histórico de sucesso ou falha no recebimento de informações via integração.
+	
+
+
+
+      6. Cadastro de Propriedade
+Permite a visualização de propriedades rurais com dados geográficos e produtivos. Cada propriedade deve estar vinculada a pelo menos um produtor. Essas propriedades são a base para controle sanitário, produção e rastreabilidade.
+Os dados de propriedades serão recebidos através de integração via API com o sistema interno da Adapar e serão disponibilizados somente leitura nesse escopo.
+O endpoint para a consulta dos dados de propriedades será disponibilizado posteriormente ao time de desenvolvimento.
+      16. Especificação de campos
+Campo
+	Tipo
+	Obrigatório
+	Observações
+	Identificação da propriedade
+	Texto
+	Sim
+	Nome ou código identificador
+	Código Adapar
+	Texto
+	Sim
+	Nome ou código identificador
+	Código externo
+	Texto
+	Não
+	Nome ou código identificador
+	Código Mapa
+	Texto
+	Não
+	Nome ou código identificador
+	Código Incra
+	Texto
+	Não
+	Nome ou código identificador
+	CPF/CNPJ 
+	Texto
+	Sim
+	
+
+	Município
+	Seleção
+	Sim
+	Localização da propriedade
+	Endereço completo
+	Texto
+	Sim
+	CEP, rua, número
+	Localidade
+	Texto
+	Não
+	Ex: distrito, sítio, estrada
+	Área total (ha)
+	Numérico
+	Não
+	Área declarada
+	Coordenadas geográficas
+	Texto
+	Não
+	Latitude e longitude
+	Produtores
+	Multi seleção
+	Sim
+	Relaciona todos os produtores da propriedade
+	Tipos de Exploração
+	Multi seleção
+	Sim
+	Relação de todos os tipos de exploração produzidas na propriedade (leite, Corte ou leite e corte)
+	Tipo de propriedade
+	seleção
+	Sim
+	Comercio / Subsistência
+	Possui certificação?
+	Sim/Não
+	Não
+	
+
+	Upload certificado
+	Arquivo
+	Não
+	Permite upload do arquivo de certificação se existir.
+	Status
+	Ativo/Inativo
+	Sim
+	
+
+	
+
+      17. Requisitos Funcionais
+Código
+	Requisito
+	Descrição
+	RF01
+	Visualizar dados de propriedade
+	Permitir acesso aos dados de cadastro de propriedade de acordo com o perfil de acesso do usuário logado
+	
+
+      18. Requisitos Não Funcionais
+Código
+	Requisito
+	Descrição
+	RNF01
+	Integração com sistemas.
+	O sistema deve receber os dados via API.
+	RNF02
+	Logs
+	Registrar data, e histórico de sucesso ou falha no recebimento de informações via integração.
+	
+
+
+
+      7. Cadastro de Laticínio
+Permite cadastrar estabelecimentos industriais ou comerciais que recebem e processam leite. Os laticínios devem estar cadastrados com dados fiscais e podem ser vinculados a propriedades ou produtores como destino da produção.
+      19. Especificação de campos
+Campo
+	Tipo
+	Obrigatório
+	Observações
+	Nome
+	Texto
+	Sim
+	Nome comercial do laticínio
+	CNPJ
+	Texto
+	Sim
+	Com validação de duplicidade
+	Inscrição Estadual
+	Texto
+	Não
+	Opcional, com validação de formato
+	Endereço
+	Texto longo
+	Sim
+	Endereço físico completo
+	Município
+	Seleção
+	Sim
+	Para fins de geolocalização e gestão
+	Telefone
+	Texto
+	Não
+	Com DDD
+	E-mail
+	Texto
+	Não
+	Para contato e integração
+	Responsável técnico
+	Texto
+	Não
+	Nome do responsável sanitário
+	Status
+	Ativo/Inativo
+	Sim
+	Define se está apto a ser vinculado
+	
+
+      20. Requisitos Funcionais
+Código
+	Requisito
+	Descrição
+	RF01
+	Visualizar dados de laticínios
+	Permitir acesso aos dados de cadastro de laticínios de acordo com o perfil de acesso do usuário logado
+	
+
+      21. Requisitos Não Funcionais
+Código
+	Requisito
+	Descrição
+	RNF01
+	Integração com sistemas.
+	O sistema deve receber os dados via API.
+	RNF02
+	Logs
+	Registrar data, e histórico de sucesso ou falha no recebimento de informações via integração.
+	
+
+
+
+      8. Cadastro de Laboratórios
+Permite cadastrar os laboratórios oficiais e credenciados que realizam análises de amostras coletadas em campo. Esse vínculo possibilita o controle da rede laboratorial disponível para envio de exames.
+      22. Especificação de campos
+Campo
+	Tipo
+	Obrigatório
+	Observações
+	Nome do laboratório
+	Texto
+	Sim
+	Nome completo oficial
+	CNPJ
+	Texto
+	Sim
+	Com validação de duplicidade
+	Município
+	Seleção
+	Sim
+	Localização
+	Telefone
+	Texto
+	Não
+	Com DDD
+	E-mail
+	Texto
+	Não
+	Usado para envio de resultados
+	Ensaios
+	Multi-Seleção
+	Sim
+	Relação dos ensaios/análises que o laboratório está apto a executar.
+	Status
+	Ativo/Inativo
+	Sim
+	Define se pode ser associado a análises
+	Token
+	Texto
+	Não
+	Geração de token que será usado para autenticação de integrações do laboratório com a Adapar.
+	
+
+      23. Requisitos Funcionais
+Código
+	Requisito
+	Descrição
+	RF01
+	Visualizar dados de Laboratórios
+	Permitir acesso aos dados de cadastro de laboratórios de acordo com o perfil de acesso do usuário logado
+	RF02
+	Geração de token
+	Permitir a geração de token de autenticação para as integrações.
+	
+
+      24. Requisitos Não Funcionais
+Código
+	Requisito
+	Descrição
+	RNF01
+	Integração com sistemas.
+	O sistema deve receber os dados via API.
+	RNF02
+	Logs
+	Registrar data, e histórico de sucesso ou falha no recebimento de informações via integração.
+	
+
+
+
+      9. Gerenciar permissões de laboratórios e laticínios
+Esta funcionalidade permite o gerenciamento detalhado de permissões de acesso a funcionalidades e APIs externas utilizadas por usuários vinculados a Laticínios e Laboratórios. É possível definir, para cada entidade e perfil de usuário, quais funcionalidades estarão disponíveis no sistema, quais APIs podem ser consumidas e o modo de autenticação (usuário/senha ou SSO).
+      25. Especificação de campos
+Campo
+	Tipo
+	Obrigatório
+	Observações
+	Entidade
+	Seleção
+	Sim
+	Laticínio ou Laboratório ativos 
+	Tipo de Entidade
+	Texto automático
+	Sim
+	Laticínio ou Laboratório
+	Usuários Vinculados
+	Múltipla Seleção
+	Não
+	Lista de usuários da entidade
+	APIs Permitidas
+	Múltipla Seleção
+	Sim
+	Lista das APIs registradas (vacinação, rebanho, conformidade, etc.)
+	Funcionalidades Acessíveis
+	Múltipla Seleção
+	Sim
+	Cadastro, envio, relatórios, etc.
+	Tipo de Login Permitido
+	Seleção
+	Sim
+	Usuário/senha, SSO, Ambos
+	Regras Específicas
+	Texto
+	Não
+	Ex: "acesso apenas fora do horário comercial"
+	Status do Perfil
+	Ativo/Inativo
+	Sim
+	Impede o login se inativo
+	
+
+      26. Requisitos Funcionais
+Código
+	Requisito
+	Descrição
+	RF01
+	Criar e editar perfis de acesso por entidade
+	Permitir definir perfis com permissões personalizadas para laticínios e laboratórios
+	RF02
+	Vincular usuários a perfis
+	Permitir associar múltiplos usuários a um perfil previamente criado
+	RF03
+	Definir acesso a APIs externas
+	Permitir selecionar quais APIs externas cada perfil pode consumir ou visualizar
+	RF04
+	Definir acesso a funcionalidades do sistema
+	Permitir configurar o acesso às funcionalidades internas por perfil
+	RF05
+	Controlar tipo de login permitido
+	Permitir habilitar login via usuário/senha e/ou via SSO por perfil ou entidade
+	RF06
+	Ativar/Inativar perfis
+	Permitir desabilitar perfis para impedir novos logins e acessos sem exclusão definitiva
+	RF07
+	Logs de acesso e ações
+	Registrar quem alterou permissões, o que foi alterado, data/hora e entidade afetada
+	
+
+      27. Requisitos Não Funcionais
+Código
+	Requisito
+	Descrição
+	RNF01
+	Interface responsiva
+	A interface deve funcionar adequadamente em desktops e tablets
+	RNF02
+	Segurança
+	O controle de permissões deve respeitar as regras de acesso do sistema e impedir escalonamento indevido
+	RNF03
+	Performance
+	A consulta e salvamento de permissões deve ocorrer em até 2 segundos
+	RNF04
+	Auditoria
+	Toda alteração em perfis, APIs ou usuários vinculados deve ser registrada com log detalhado
+	RNF05
+	Consistência
+	O sistema deve validar se o usuário está vinculado à entidade antes de aplicar permissões
+	RNF06
+	Aplicação em tempo real
+	Alterações de permissões devem surtir efeito imediato após o salvamento
+	
+
+
+
+      10. Cadastro de Tipo de Exploração
+Define e mantém a lista de tipos de exploração agropecuária (ex: “leite”, “corte” e “leite e corte”) utilizadas para caracterizar a atividade produtiva de uma propriedade.
+Os dados de tipo de exploração serão recebidos através de integração via API com o sistema interno da Adapar e serão disponibilizados somente leitura nesse escopo.
+      28. Especificação de campos
+Campo
+	Tipo
+	Obrigatório
+	Observações
+	Nome do tipo
+	Texto
+	Sim
+	Ex: Leite, Corte, Agricultura Diversificada
+	Descrição
+	Texto longo
+	Não
+	Observações técnicas ou regulatórias
+	Status
+	Ativo/Inativo
+	Sim
+	Controla disponibilidade para novos cadastros
+	
+
+      29. Requisitos Funcionais
+Código
+	Requisito
+	Descrição
+	RF01
+	Visualizar dados de Tipo de Exploração
+	Permitir acesso aos dados de cadastro de tipos de exploração de acordo com o perfil de acesso do usuário logado
+	
+
+      30. Requisitos Não funcionais
+Código
+	Requisito
+	Descrição
+	RNF01
+	Integração com sistemas.
+	O sistema deve receber os dados via API.
+	RNF02
+	Logs
+	Registrar data, e histórico de sucesso ou falha no recebimento de informações via integração.
+	
+
+
+
+      11. Cadastro de Animais
+Permite o recebimento e visualização dos dados de animais que estão vinculados a uma propriedade. Esse controle é importante para ter o vínculo de vacinas e demais exames laboratoriais executados em cada propriedade e gerar o atestado de conformidade que os todos os animais estão aptos a comercialização de produção. 
+Os dados de animais serão recebidos através de integração via API através do número de registro, brinco ou apelido do animal, com o sistema interno da Adapar e serão disponibilizados somente leitura nesse escopo.
+      31. Especificação de Campos
+Campo
+	Tipo
+	Obrigatório
+	Observações
+	Identificador
+	Texto
+	Sim
+	código de controle interno
+	Número do registro
+	Texto
+	Sim
+	
+
+	Número do brinco
+	Texto
+	Não
+	
+
+	Data Nascimento
+	Data
+	Não
+	
+
+	Sexo
+	Seleção
+	Não
+	
+
+	Criador
+	Seleção
+	Sim
+	
+
+	Propriedade
+	Seleção
+	Sim
+	
+
+	Categoria Animal
+	Seleção
+	Sim
+	
+
+	tipo de exploração
+	Seleção
+	Sim
+	
+
+	Status
+	Ativo/Inativo
+	Sim
+	
+
+	
+
+      32. Requisitos Funcionais
+Código
+	Requisito
+	Descrição
+	RF01
+	Visualizar dados de Tipo de Exploração
+	Permitir acesso aos dados de cadastro de tipos de exploração de acordo com o perfil de acesso do usuário logado
+	
+
+      33. Requisitos Não Funcionais
+Código
+	Requisito
+	Descrição
+	RNF01
+	Integração com sistemas.
+	O sistema deve receber os dados via API.
+	RNF02
+	Logs
+	Registrar data, e histórico de sucesso ou falha no recebimento de informações via integração.
+	
+
+      12. Controle de rebanho
+Essa funcionalidade permite de forma fácil a visualização e gerenciamento de rebanho, vinculando animais com a propriedade.
+      34. Especificação de campos
+Campo
+	Tipo
+	Obrigatório
+	Observações
+	Identificador
+	Texto
+	Sim
+	código de controle interno
+	Propriedade
+	seleção
+	Sim
+	
+
+	Animais
+	multi seleção
+	Sim
+	Permite relacionar os animais que fazem parte do rebanho da fazenda
+	Última data de atualização
+	Data
+	Sim
+	
+
+	Responsável
+	Texto
+	Sim
+	
+
+	tempo para atualização
+	Texto
+	Sim
+	Define o número de dias de quanto em quanti tempo o rebanho precisa ser atualizado.
+	
+
+      35. Requisitos Funcionais
+Código
+	Requisito
+	Descrição
+	RF01
+	Visualizar dados de rebanhos
+	Permitir acesso aos dados de rebanho de acordo com o perfil de acesso do usuário logado
+	RF02
+	Receber dados via API
+	Permitir que entidades atualizem os dados de rebanho via disponibilização de API rest.
+	
+
+      36. Requisitos Não Funcionais
+Código
+	Requisito
+	Descrição
+	RNF01
+	Integração com sistemas.
+	O sistema deve receber os dados via API.
+	RNF02
+	Logs
+	Registrar data, e histórico de sucesso ou falha no recebimento de informações via integração.
+	
+
+
+
+      13. Cadastro de entidades representativas
+Funcionalidade que permite o  cadastro das entidades autorizadas que poderão enviar e atualizar os dados de rebanho.
+      37. Especificação de campos
+Campo
+	Tipo
+	Obrigatório
+	Observações
+	Identificador
+	Texto
+	Sim
+	código de controle interno
+	CNPJ
+	Texto
+	Sim
+	
+
+	Nome
+	Texto
+	Sim
+	
+
+	Telefone
+	Texto
+	Não
+	
+
+	E-mail
+	Texto
+	Não
+	
+
+	status
+	Ativo/Inativo
+	Sim
+	
+
+	Token autenticação
+	Hash
+	Não
+	Permite gerar o token de autenticação para essa entidade integrar com as APIs
+	
+
+      38. Requisitos Funcionais
+Código
+	Requisito
+	Descrição
+	RF01
+	Visualizar dados de entidades
+	Permitir acesso aos dados de cadastro de acordo com o perfil de acesso do usuário logado
+	
+
+      39. Requisitos Não Funcionais
+Código
+	Requisito
+	Descrição
+	RNF01
+	Logs
+	Registrar data, e histórico de sucesso ou falha no recebimento de informações via integração.
+	
+
+      14. Cadastro de Veterinários
+Essa funcionalidade permite a visualização dos dados cadastrais dos veterinários habilitados. 
+Os dados de veterinários serão recebidos através de integração via API com o sistema interno da Adapar e serão disponibilizados somente leitura nesse escopo.
+      40. Especificação de Campos
+Campo
+	Tipo
+	Obrigatório
+	Observações
+	Número CRMV
+	Texto
+	Sim
+	Número de registro do médico veterinário
+	CPF/CNPJ
+	Texto
+	Sim
+	
+
+	Nome
+	Texto
+	sim
+	
+
+	Telefone
+	Texto
+	Não
+	
+
+	Especialidade
+	Seleção
+	Não
+	Permite apresentar qual a especialidade do médico veterinário
+	Validade registro
+	Data
+	Sim
+	Apresenta a validade do registro do médico veterinário.
+	Status
+	Ativo/Inativo
+	Sim
+	
+
+	
+
+      41. Requisitos Funcionais
+Código
+	Requisito
+	Descrição
+	RF01
+	Visualizar dados de veterinários
+	Permitir acesso aos dados de cadastro de acordo com o perfil de acesso do usuário logado
+	
+
+      42. Requisitos Não Funcionais
+Código
+	Requisito
+	Descrição
+	RNF01
+	Integração com sistemas.
+	O sistema deve receber os dados via API.
+	RNF02
+	Logs
+	Registrar data, e histórico de sucesso ou falha no recebimento de informações via integração.
+	
+
+      15. Cadastro de Vacinas
+Essa funcionalidade permite a visualização dos dados cadastrais das vacinas praticadas que serão recebidas. 
+Os dados de vacinas serão recebidos através de integração via API com o sistema interno da Adapar e serão disponibilizados somente leitura nesse escopo.
+      43. Especificação de campos
+Campo
+	Tipo
+	Obrigatório
+	Observações
+	Identificador
+	Texto
+	Sim
+	código de controle interno
+	Descrição
+	Texto
+	Sim
+	
+
+	Tipo
+	Texto
+	Não
+	Campo para descrever o tipo de vacina caso seja necessário
+	aplicação única?
+	Checkbox
+	Não
+	
+
+	Periodicidade
+	Texto
+	Sim
+	Quando não for aplicação única significa que a vacina deve ser repetida durante a vida do animal, então permite informar em quantidade de dias a periodicidade que a vacina deve ser aplicada.
+	Status
+	Ativo/Inativo
+	Sim
+	
+
+	
+
+      44. Requisitos Funcionais
+Código
+	Requisito
+	Descrição
+	RF01
+	Visualizar dados de vacinas
+	Permitir acesso e cadastro de dados de cadastro de vacinas de acordo com o perfil de acesso do usuário logado
+	RF02
+	controle de periodicidade
+	Se a vacina é de única aplicação ou se precisa ser repetida em determinado período informando a quantidade de dias de periodicidade o sistema irá exibir alertas e bloqueios referente ao não recebimento dos ensaios de propriedades dentro do prazo determinado.
+	
+
+      45. Requisitos Não funcionais
+Código
+	Requisito
+	Descrição
+	RNF01
+	Integração com sistemas.
+	O sistema deve receber os dados via API.
+	RNF02
+	Logs
+	Registrar data, e histórico de sucesso ou falha no recebimento de informações via integração.
+	
+
+
+
+      16. Cadastro de Ensaios (tipos de exames)
+Essa funcionalidade permite a visualização dos dados cadastrais dos ensaios praticados que serão recebidos. 
+Os dados de ensaios serão recebidos através de integração via API com o sistema interno da Adapar e serão disponibilizados somente leitura nesse escopo. Além de permitir a parametrização de status (ativo ou inativo) e período de abrangência, ou seja, o período que o criador será obrigado a repetir as análises.
+      46. Especificação de campos
+Campo
+	Tipo
+	Obrigatório
+	Observações
+	Identificador
+	Texto
+	Sim
+	código de controle interno
+	Descrição
+	Texto
+	Sim
+	
+
+	Periodicidade
+	Texto
+	Sim
+	Permite informar em quantidade de dias a periodicidade que o ensaio deve ser recebido.
+	Obrigatório
+	Sim/Não
+	Não
+	
+
+	Status
+	Ativo/Inativo
+	Sim
+	
+
+	
+
+      47. Requisitos Funcionais
+Código
+	Requisito
+	Descrição
+	RF01
+	Visualizar dados de Ensaios
+	Permitir acesso aos dados de cadastro de ensaios de acordo com o perfil de acesso do usuário logado
+	RF02
+	Parametrizar controle de periodicidade
+	Informando a quantidade de dias de periodicidade o sistema irá exibir alertas e bloqueios referente ao não recebimento dos ensaios de propriedades dentro do prazo determinado.
+	
+
+      48. Requisitos não funcionais
+Código
+	Requisito
+	Descrição
+	RNF01
+	Integração com sistemas.
+	O sistema deve receber os dados via API.
+	RNF02
+	Logs
+	Registrar data, e histórico de sucesso ou falha no recebimento de informações via integração.
+	
+
+
+
+      17. Controle de produção de leite (Pool)
+Permite que  seja feito o controle e acompanhamento de fornecimento de leite ou como é conhecido na terminologia de “Pool” onde determina a relação de laticínio com os produtores que fornecem à ele.
+
+
+Esse recebimento de dados de pool pode ocorrer junto com o envio das amostras cujas análises foram solicitadas pelo laticínio.
+      49. Especificação de campos
+Campo
+	Tipo
+	Obrigatório
+	Observações
+	Propriedade
+	Seleção
+	Sim
+	
+
+	Produtor
+	Seleção
+	Sim
+	
+
+	Laticínio
+	Seleção
+	Sim
+	
+
+	Rebanho
+	Multi-seleção
+	Sim
+	Seleção de animais que fazem parte do pool de produção
+	Data última atualização
+	Data
+	Sim
+	
+
+	
+
+      50. Requisitos Funcionais
+Código
+	Requisito Funcional
+	Descrição
+	RF01
+	Cadastrar novo vínculo de Pool
+	Permitir registrar que determinada propriedade/produtor fornece leite a um laticínio
+	RF02
+	Selecionar rebanho vinculado ao pool
+	Permitir seleção de um ou mais animais da propriedade que compõem o rebanho leiteiro
+	RF03
+	Editar vínculo existente
+	Permitir alterar os dados do pool, como rebanho envolvido ou data de atualização
+	RF04
+	Listar vínculos de Pool por laticínio
+	Exibir todos os produtores vinculados a um determinado laticínio em um período específico
+	RF05
+	Listar vínculos de Pool por propriedade
+	Exibir os laticínios aos quais uma propriedade está ou esteve vinculada
+	RF06
+	Manter histórico de vínculos
+	Armazenar as alterações com data/hora para auditoria e rastreabilidade
+	RF07
+	Validar integridade dos dados
+	Impedir vínculo duplicado da mesma propriedade com o mesmo laticínio e rebanho no mesmo período
+	RF08
+	Permitir exportação em CSV ou PDF
+	Exportar lista de vínculos ativos ou históricos para fins de auditoria ou fiscalização
+	RF09
+	Permitir consulta por data de atualização
+	Filtrar registros com base na data da última atualização
+	RF10
+	Permitir uso de API para consulta de vínculo
+	Laticínios e entidades externas podem consultar via API os produtores do seu pool
+	
+
+      51. Requisitos não funcionais
+Código
+	Requisito Não Funcional
+	Descrição
+	RNF01
+	Interface responsiva
+	Funcionalidade deve estar acessível em diferentes resoluções (desktop, tablet)
+	RNF02
+	Tempo de resposta
+	A consulta de vínculos de pool deve ocorrer em até 2 segundos
+	RNF03
+	Segurança de dados
+	Somente usuários autorizados podem consultar, alterar ou cadastrar vínculos
+	RNF04
+	Registro de logs
+	Toda alteração no vínculo de pool deve ser registrada com data, usuário e ação realizada
+	RNF05
+	Disponibilidade da API
+	As APIs de consulta de vínculo devem estar disponíveis 99,9% do tempo
+	RNF06
+	Auditoria e rastreabilidade
+	Histórico completo de edições deve estar disponível para órgãos reguladores ou administradores do sistema
+	RNF07
+	Consistência referencial
+	Não permitir cadastro de vínculo com propriedades ou rebanhos inativos ou inválidos
+	RNF08
+	Conformidade com LGPD
+	Dados pessoais (ex: do produtor) devem ser tratados de acordo com a legislação vigente
+	
+
+      18. Atestado de conformidade
+Permite a geração de um atestado que a propriedade está apta para comercializar os produtos. O atestado é concedido quando todos os animais contidos nela estão com as vacinas e exames em situação regular.
+Para a geração do atestado de aptidão deve ser atendido algumas regras pré-estabelecidas:
+Todos os animais relacionados à propriedade seja de um ou mais criadores, devem estar com a vacinação e resultados de ensaios em dia, onde para as vacinas, cada uma tem seu período de validade (este que é parametrizado no sistema) e considerando data atual com a data da última vacina que temos o registro, se estiver dentro do período de cobertura, então permite que seja gerado o atestado de conformidade. 
+Para as análises, é basicamente a mesma regra de vacinação, onde verifica-se os ensaios ativos e obrigatórios, considerando a data atual e retroagindo para a quantidade de dias parametrizados, e verifica se houve o envio desses ensaios e se os resultados são positivos ou negativos.
+Em resumo, tendo sido encontrado registro de vacinação dentro da cobertura necessária e resultados não positivos dentro do período, para todos os criadores da propriedade (o que inclui todos os rebanhos) o atestado será gerado.
+Quando a propriedade possui certificação o atestado é gerado sempre em conformidade.
+      52. Especificação de campos
+Campo
+	Tipo
+	Obrigatório
+	Observações
+	Propriedade
+	Seleção
+	Sim
+	
+
+	Produtor
+	Seleção
+	Sim
+	
+
+	Animais
+	Multi Seleção
+	Não
+	Quando não selecionado o atestado será concedido para todos os animais vinculados com a propriedade
+	Exames/Ensaios
+	Texto
+	Sim
+	apresenta todos os ensaios que estão vinculados com a propriedade
+	Vacinas
+	Texto
+	Sim
+	apresenta todos os ensaios que estão vinculados com a propriedade
+	Veterinário responsável
+	Seleção
+	Não
+	Se informado será impresso no atestado de conformidade.
+	Data
+	Texto
+	Sim
+	Preenchido automaticamente com a data atual
+	
+
+      53. Requisitos Funcionais
+Código
+	Requisito
+	Descrição
+	RF01
+	Gerar relatório
+	Permitir gerar o relatório de conformidade no modelo padrão contendo todas as informações pertinentes à propriedade.
+O relatório só deve ser gerado se atendido todas as regras especificadas de aptidão.
+	RF02
+	Validação de não conformidade
+	Caso algum animal selecionado não esteja regular o relatório de conformidade em PDF da propriedade não é gerado e apresenta uma mensagem de aviso sobre.
+	RF03
+	Permitir gerar relatório por pool
+	Permitir gerar atestado de conformidade para um pool de propriedades, via api que será consumida pelos laticinios. 
+	
+
+      54. Requisitos Não Funcionais
+Código
+	Requisito
+	Descrição
+	RNF01
+	Logs
+	Registrar data, e histórico de geração do relatório
+	
+
+
+
+      19. Resultados de Ensaios/Exames laboratoriais
+Permite o recebimento dos exames laboratoriais realizados a partir das amostras coletadas. Os resultados são recebidos através de API disponibilizada aos devidos laboratórios que estão credenciados e tem obrigatoriedade de envio dessas análises sejam elas em tempo real, uma vez ao mês ou de acordo com a necessidade. 
+      55. Especificação de campos
+Campo
+	Tipo
+	Obrigatório
+	Observações
+	Identificador
+	Texto
+	Sim
+	código de controle interno
+	Produtor
+	Texto
+	Sim
+	Produtor vinculado deve estar cadastrado
+	Propriedade
+	Texto
+	Sim
+	Propriedade vinculada deve estar cadastrada
+	Laticínio
+	Texto
+	Sim
+	Laticínio  vinculado deve estar cadastrada
+	Data
+	Texto
+	Sim
+	Data que a análise foi executada
+	Resultados
+	Ensaio
+	Texto
+	Sim
+	Permite visualizar todos os ensaios recebidos no relatório de ensaio
+	Amostra
+	Texto
+	Sim
+	Visualização de todas as amostras vinculadas em cada ensaio realizado
+	Animais
+	Texto
+	Sim
+	Visualização de todos os animais vinculadas em cada amostra.
+	Relatório de ensaio
+	Texto
+	Sim
+	Permite a visualização do resultado de cada ensaio realizado
+	
+
+      56. Requisitos Funcionais
+Código
+	Requisito
+	Descrição
+	RF01
+	Visualizar dados de Ensaios
+	Permitir acesso aos dados de cadastro de ensaios de acordo com o perfil de acesso do usuário logado
+	
+
+      57. Requisitos não funcionais
+Código
+	Requisito
+	Descrição
+	RNF01
+	Integração com sistemas.
+	O sistema deve receber os dados via API.
+	RNF02
+	Logs
+	Registrar data, e histórico de sucesso ou falha no recebimento de informações via integração.
+	
+
+      20. Dashboard
+Apresenta indicadores visuais e dados consolidados sobre indicadores e não conformidades.
+      58. Requisitos Funcionais
+Código
+	Requisito
+	Descrição
+	RF01
+	Apresentar gráficos e contadores por status
+	Exibir número de inconformidades por período
+	RF02
+	Exibir resultados
+	Exibir quantidade de resultados recebidos por laboratório e período.
+	RF03
+	Exibir alertas
+	Apresentar os alertas e comunicados pertinentes como por exemplo os veterinários que estão com registro expirado, propriedades que não enviaram os ensaios dentro do período necessário, vacinações de rebanhos que estão em atraso, etc.
+	RF04
+	Exibir inconformidade de rebanhos
+	Cruzamento de dados entre Rebanho informado na vacinação e rebanho atualizado através da atualização do rebanho e rebanho descrito nas amostras realizadas para identificar omissão de dados;
+	RF05
+	Exibir cruzamento de dados entre Laticínio, Produtor e Fornecimento de Leite
+	O dashboard deve apresentar um bloco de visualização que cruze os dados de vínculo entre Laticínios e seus respectivos produtores, com os animais envolvidos na produção de leite (pool). O cruzamento deve identificar:
+• Laticínio
+• Propriedade/Produtor
+• Data da última atualização do vínculo
+• Quantidade de animais vinculados
+• Situação do vínculo (ativo, desatualizado, inexistente)
+• Indicação de inconsistência, quando houver produção de leite (ex: análises, laudos) sem vínculo de pool cadastrado
+	
+
+      59. Requisitos não Funcionais
+Código
+	Requisito
+	Descrição
+	RNF01
+	Interface responsiva
+	Dashboard deve se adaptar a diferentes tamanhos de tela (desktop, tablet).
+	RNF02
+	Permissões por perfil
+	A visualização de cada bloco deve obedecer às permissões do usuário logado.
+	RNF03
+	Performance e cache inteligente
+	O sistema deve usar cache para exibir dados rapidamente sem sobrecarregar o banco.
+	
+
+      21. Controle de Vacinação
+Funcionalidade utilizada para registrar vacinações realizadas nos animais das propriedades, com envio das informações à ADAPAR.
+A vacinação será recebida via integração de API que será consumida pelos laboratórios, veterinários ou quem desejar para o envio dos dados.
+      60. Especificação de campos
+Campo
+	Tipo
+	Obrigatório
+	Observações
+	Identificador
+	Texto
+	Sim
+	código de controle interno
+	Propriedade
+	Seleção
+	Sim
+	Seleção da propriedade, que deve estar cadastrada no sistema.
+	Produtor
+	Seleção
+	Sim
+	Seleção do proprietário que está relacionado com a propriedade, e que deve estar cadastrado no sistema.
+	Animal
+	multi - Seleção
+	Sim
+	Seleção dos animais que tiveram a vacina aplicada.
+	Vacina
+	Seleção
+	Sim
+	Informar dados de tipo de vacina, lote, 
+	Responsável
+	Texto
+	Sim
+	Informa o responsável pela vacinação
+	Data
+	Data
+	Sim
+	Informa a data que a vacinação foi efetuada
+	
+
+      61. Requisitos Funcionais
+Código
+	Requisito
+	Descrição
+	RF01
+	Validar vacinas
+	A partir desse cadastro permite validar a obrigatoriedade da vacinação por animal de acordo com o parâmetro do cadastro de vacinas, e deve apresentar os devidos alertas quando o animais não possui a vacinação.
+	
+
+      62. Requisitos Não funcionais
+Código
+	Requisito
+	Descrição
+	RNF01
+	Receber os dados de vacinação
+	Enviar e receber os registros para via integração segura (serviço REST).
+	RNF02
+	Logs
+	Registrar data, e histórico de sucesso ou falha no recebimento de informações via integração.
+	
+
+      22. Consumo ou disponibilização de Serviços 
+O sistema deve expor ou consumir serviços REST para integração com laboratórios, laticínios,  Adapar e demais sistemas que façam o consumo dos endpoints disponibilizados.
+      63. Requisitos Funcionais
+Código
+	Requisito
+	Ação
+	Descrição
+	RF01
+	Exames laboratoriais
+	Receber
+	Disponibilização de serviço para receber exames laboratoriais com dados em Base64, autenticação por token.
+	RF02
+	Permitir cadastro de pool de produção
+	Disponibilizar
+	Os laticínios e associações devem ter acesso ao sistema para criação de pool de produção de leite.
+	RF03
+	Gerar atestado de conformidade
+	Disponibilizar
+	Disponibilização do atestado de conformidade para a consulta via integração rest API e autenticação via token. 
+	RF04
+	Gerar atestado de aptidão
+	Disponibilizar
+	Disponibilização do atestado de aptidão do veterinário para a consulta via integração rest API e autenticação via token. 
+	RF05
+	Registro de Vacinação
+	Receber
+	Deve existir um serviço disponibilizado para receber os registros de vacinação dos rebanhos
+	RF06
+	Dados de Laboratórios
+	Consultar
+	O sistema fará a consulta em serviço externo para busca dos dados de laboratórios.
+	RF07
+	Dados de Produtores
+	Consultar
+	O sistema fará a consulta em serviço externo para busca dos dados de produtores.
+	RF08
+	Dados de Propriedades
+	Consultar
+	O sistema fará a consulta em serviço externo para busca dos dados de propriedades.
+	RF09
+	Produção de leite
+	Receber
+	Deve existir um serviço disponibilizado para receber os dados referente a produtores que cada laticínio recebe a produção.
+	RF10
+	Dados de Animais
+	Consultar
+	O sistema fará a consulta em serviço externo para busca dos dados de animais.
+	RF11
+	Dados de veterinários
+	Consultar
+	O sistema fará a consulta em serviço externo para busca dos dados de veterinários.
+	RF12
+	Dados cadastrais
+	Consultar
+	O sistema irá consultar os dados de cadastros, assim como propriedades,  criadores, dados de vacinas, laticínios, etc,  no sistema atual da Adapar, assim tendo todas as informações necessárias disponibilizadas para as validações e controles necessários nesse sistema.
+	
+
+      64. Requisitos Não funcionais
+Código
+	Requisito
+	Descrição
+	RNF01
+	Segurança
+	Todos os dados devem ser acessados somente com a devida autenticação de token OAuth2.
