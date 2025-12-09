@@ -25,7 +25,7 @@ const ChatWidget = ({ isOpen, onClose }: ChatWidgetProps) => {
         >
           <Card className="w-full h-full flex flex-col shadow-2xl border-0 overflow-hidden bg-gradient-to-b from-card to-card/95">
             {/* Header */}
-            <div className="bg-gradient-to-r from-red-500 to-red-600 text-white p-4">
+            <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="relative">
@@ -36,7 +36,7 @@ const ChatWidget = ({ isOpen, onClose }: ChatWidgetProps) => {
                     </Avatar>
                   </div>
                   <div>
-                    <h3 className="font-semibold">Nexia</h3>
+                    <h3 className="font-semibold">Flow</h3>
                     <p className="text-xs text-white/80 flex items-center gap-1">
                       <span className="h-2 w-2 bg-green-400 rounded-full animate-pulse"></span>
                       Online
@@ -61,7 +61,7 @@ const ChatWidget = ({ isOpen, onClose }: ChatWidgetProps) => {
               <div className="text-center text-muted-foreground py-8">
                 <Brain className="h-12 w-12 mx-auto mb-3 opacity-50" />
                 <p className="text-sm">Chat em desenvolvimento</p>
-                <p className="text-xs mt-2">Em breve você poderá conversar com a Nexia</p>
+                <p className="text-xs mt-2">Em breve você poderá conversar com o Flow</p>
               </div>
             </ScrollArea>
 
@@ -76,7 +76,7 @@ const ChatWidget = ({ isOpen, onClose }: ChatWidgetProps) => {
                 <Button
                   size="sm"
                   disabled
-                  className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700"
+                  className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
                 >
                   <Send className="h-4 w-4" />
                 </Button>
