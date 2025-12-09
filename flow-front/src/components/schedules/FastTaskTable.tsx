@@ -31,7 +31,10 @@ import {
   Clock,
   AlertCircle,
   Package,
+  Copy,
+  Check,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Sprint } from '@/types';
 
 interface FastTaskRowProps {
@@ -52,6 +55,7 @@ interface FastTaskRowProps {
   sprints?: Sprint[];
   handleSprintChange?: (taskId: number, sprintId: number | null, moveToBacklog: boolean) => void;
   statuses: TaskStatusEntity[];
+  onTaskClick?: (task: ScheduleTask) => void;
 }
 
 const FastTaskRow = memo<FastTaskRowProps>(({
@@ -71,7 +75,34 @@ const FastTaskRow = memo<FastTaskRowProps>(({
   sprints = [],
   handleSprintChange,
   statuses,
+  onTaskClick,
 }) => {
+  const [copied, setCopied] = React.useState(false);
+
+  const handleCopyTitle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(task.title);
+    setCopied(true);
+    toast.success('Título copiado!');
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleRowClick = (e: React.MouseEvent) => {
+    // Não abrir modal se clicou em elementos interativos
+    const target = e.target as HTMLElement;
+    if (
+      target.closest('button') ||
+      target.closest('select') ||
+      target.closest('[role="combobox"]') ||
+      target.closest('[role="listbox"]') ||
+      target.closest('[data-radix-collection-item]') ||
+      target.closest('.drag-handle')
+    ) {
+      return;
+    }
+    onTaskClick?.(task);
+  };
+
   const taskInfo = {
     title: task.title,
     assigneeName: teamMembers.find(m => m.id === task.assigneeId?.toString())?.name,
@@ -86,7 +117,10 @@ const FastTaskRow = memo<FastTaskRowProps>(({
       taskInfo={taskInfo}
       dragHandleSelector=".drag-handle"
     >
-      <TableRow className="select-none">
+      <TableRow
+        className="select-none cursor-pointer hover:bg-muted/50 transition-colors"
+        onClick={handleRowClick}
+      >
         <TableCell className="w-16 font-medium">
           <div className="flex items-center gap-2">
             <div className="drag-handle w-4 h-4 flex items-center justify-center text-muted-foreground cursor-grab hover:text-gray-700 transition-colors">
@@ -96,7 +130,22 @@ const FastTaskRow = memo<FastTaskRowProps>(({
           </div>
         </TableCell>
         <TableCell className="w-32 xl:w-48">
-          <p className="font-medium">{task.title}</p>
+          <div className="flex items-center gap-2 group">
+            <p className="font-medium truncate flex-1">{task.title}</p>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+              onClick={handleCopyTitle}
+              title="Copiar título"
+            >
+              {copied ? (
+                <Check className="h-3 w-3 text-green-500" />
+              ) : (
+                <Copy className="h-3 w-3 text-muted-foreground" />
+              )}
+            </Button>
+          </div>
         </TableCell>
         <TableCell className="w-28 xl:w-36">
           <Select
@@ -270,6 +319,7 @@ interface FastTaskTableProps {
   handleSprintChange?: (taskId: number, sprintId: number | null, moveToBacklog: boolean) => void;
   statuses: TaskStatusEntity[];
   maxVisible?: number;
+  onTaskClick?: (task: ScheduleTask) => void;
 }
 
 export const FastTaskTable = memo<FastTaskTableProps>(({
@@ -289,6 +339,7 @@ export const FastTaskTable = memo<FastTaskTableProps>(({
   sprints = [],
   handleSprintChange,
   statuses,
+  onTaskClick,
 }) => {
   return (
     <FastReorderContainer id={containerId}>
@@ -328,6 +379,7 @@ export const FastTaskTable = memo<FastTaskTableProps>(({
               sprints={sprints}
               handleSprintChange={handleSprintChange}
               statuses={statuses}
+              onTaskClick={onTaskClick}
             />
           ))}
         </TableBody>

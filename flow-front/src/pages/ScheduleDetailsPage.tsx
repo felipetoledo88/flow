@@ -46,6 +46,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { NewLoader } from '@/components/ui/new-loader';
 import TaskFormModal from '@/components/schedules/TaskFormModal';
+import TaskDetailsModal from '@/components/schedules/TaskDetailsModal';
 import EditProjectModal from '@/components/projects/EditProjectModal';
 import UpdateTaskHoursModal from '@/components/schedules/UpdateTaskHoursModal';
 import ScheduleFormModal from '@/components/schedules/ScheduleFormModal';
@@ -134,6 +135,11 @@ const ScheduleDetailsPage = () => {
   const { setSelectedProject, setShowAllProjects } = useProjectStore();
   const [sprintFilter, setSprintFilter] = useState<string>('all');
 
+  // Estado para o modal de detalhes da tarefa (usado no cronograma)
+  const [taskDetailsModal, setTaskDetailsModal] = useState<{ isOpen: boolean; task: ScheduleTask | null }>({
+    isOpen: false,
+    task: null,
+  });
 
   const [transferTasksModal, setTransferTasksModal] = useState<{ isOpen: boolean; sprintId: number; sprintName: string; nextSprintName: string; incompleteTasksCount: number; statusSprintId: number; }>({
     isOpen: false,
@@ -699,6 +705,16 @@ const ScheduleDetailsPage = () => {
       }
       updateActualExpectedEndDate();
     }
+
+    // Atualizar também no modal de detalhes se estiver aberto
+    if (taskDetailsModal.isOpen && taskDetailsModal.task?.id === updatedTask.id) {
+      setTaskDetailsModal(prev => ({ ...prev, task: updatedTask }));
+    }
+  };
+
+  // Handler para abrir modal de detalhes ao clicar na linha do cronograma
+  const handleTaskClick = (task: ScheduleTask) => {
+    setTaskDetailsModal({ isOpen: true, task });
   };
 
   const onScheduleSaved = () => {
@@ -1574,6 +1590,7 @@ const ScheduleDetailsPage = () => {
                                   handleSprintChange={handleSprintChange}
                                   statuses={statuses}
                                   maxVisible={50}
+                                  onTaskClick={handleTaskClick}
                                 />
                               ) : (
                                 <div className="text-center py-8">
@@ -1634,6 +1651,7 @@ const ScheduleDetailsPage = () => {
                                 handleSprintChange={handleSprintChange}
                                 statuses={statuses}
                                 maxVisible={50}
+                                onTaskClick={handleTaskClick}
                               />
                             ) : (
                               <BacklogDropZone />
@@ -1765,6 +1783,17 @@ const ScheduleDetailsPage = () => {
           setIsImportModalOpen(false);
         }}
       />
+
+      {taskDetailsModal.task && (
+        <TaskDetailsModal
+          task={taskDetailsModal.task}
+          isOpen={taskDetailsModal.isOpen}
+          onClose={() => setTaskDetailsModal({ isOpen: false, task: null })}
+          onUpdate={handleTaskUpdate}
+          teamMembers={getTeamMembers()}
+          statuses={statuses}
+        />
+      )}
     </div>
   );
 };
