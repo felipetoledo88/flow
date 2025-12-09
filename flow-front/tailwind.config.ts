@@ -71,10 +71,10 @@ export default {
 					DEFAULT: 'hsl(var(--warning))',
 					foreground: 'hsl(var(--warning-foreground))'
 				},
-				nextage: {
-					red: 'hsl(var(--nextage-red))',
-					'red-light': 'hsl(var(--nextage-red-light))',
-					'red-dark': 'hsl(var(--nextage-red-dark))'
+				brand: {
+					DEFAULT: 'hsl(var(--brand-primary))',
+					light: 'hsl(var(--brand-primary-light))',
+					dark: 'hsl(var(--brand-primary-dark))'
 				},
 				chart: {
 					'1': 'hsl(var(--chart-1))',

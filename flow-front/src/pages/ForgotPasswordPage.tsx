@@ -15,7 +15,7 @@ const ForgotPasswordPage = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    
+
     // Simulate sending reset email
     setTimeout(() => {
       setIsLoading(false);
@@ -29,14 +29,14 @@ const ForgotPasswordPage = () => {
 
   if (emailSent) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-red-50 via-rose-50 to-pink-50 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-sky-50 to-indigo-50 flex items-center justify-center p-4">
         <div className="w-full max-w-md">
           {/* Logo/Brand Section */}
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-red-600 to-rose-600 rounded-xl mb-4 shadow-lg">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl mb-4 shadow-lg">
               <Zap className="h-8 w-8 text-white" />
             </div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Next Flow</h1>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Flow</h1>
           </div>
 
           {/* Success Message */}
@@ -52,7 +52,7 @@ const ForgotPasswordPage = () => {
                 Instruções para redefinir sua senha foram enviadas para seu email
               </CardDescription>
             </CardHeader>
-            
+
             <CardContent className="space-y-4">
               <div className="bg-gray-50 p-4 rounded-lg">
                 <p className="text-sm text-gray-600 text-center">
@@ -67,7 +67,7 @@ const ForgotPasswordPage = () => {
                 <p>Não recebeu o email? Verifique sua caixa de spam ou</p>
                 <button
                   onClick={() => setEmailSent(false)}
-                  className="text-red-600 hover:text-red-800 font-medium transition-colors"
+                  className="text-blue-600 hover:text-blue-800 font-medium transition-colors"
                 >
                   tente novamente
                 </button>
@@ -86,7 +86,7 @@ const ForgotPasswordPage = () => {
 
           {/* Footer */}
           <div className="text-center mt-8 text-sm text-gray-500">
-            <p>&copy; 2024 Next Flow. Todos os direitos reservados.</p>
+            <p>&copy; 2024 Flow. Todos os direitos reservados.</p>
           </div>
         </div>
       </div>
@@ -94,14 +94,14 @@ const ForgotPasswordPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-red-50 via-rose-50 to-pink-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-sky-50 to-indigo-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         {/* Logo/Brand Section */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-red-600 to-rose-600 rounded-xl mb-4 shadow-lg">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl mb-4 shadow-lg">
             <Zap className="h-8 w-8 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Next Flow</h1>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Flow</h1>
           <p className="text-gray-600">Redefinir sua senha</p>
         </div>
 
@@ -115,7 +115,7 @@ const ForgotPasswordPage = () => {
               Digite seu email e enviaremos instruções para redefinir sua senha
             </CardDescription>
           </CardHeader>
-          
+
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
@@ -130,7 +130,7 @@ const ForgotPasswordPage = () => {
                     placeholder="Digite seu email cadastrado"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="h-11 border-gray-200 focus:border-red-500 focus:ring-red-500 bg-white pl-10"
+                    className="h-11 border-gray-200 focus:border-blue-500 focus:ring-blue-500 bg-white pl-10"
                     required
                   />
                 </div>
@@ -138,7 +138,7 @@ const ForgotPasswordPage = () => {
 
               <Button
                 type="submit"
-                className="w-full h-11 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-medium shadow-lg hover:shadow-xl transition-all duration-200"
+                className="w-full h-11 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-medium shadow-lg hover:shadow-xl transition-all duration-200"
                 disabled={isLoading}
               >
                 {isLoading ? (
@@ -169,7 +169,7 @@ const ForgotPasswordPage = () => {
 
         {/* Footer */}
         <div className="text-center mt-8 text-sm text-gray-500">
-          <p>&copy; 2024 Next Flow. Todos os direitos reservados.</p>
+          <p>&copy; 2024 Flow. Todos os direitos reservados.</p>
         </div>
       </div>
     </div>

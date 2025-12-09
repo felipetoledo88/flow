@@ -1,0 +1,112 @@
+/*
+ * Flow Design System
+ * Sistema de cores, tipografia e componentes
+ *
+ * Para alterar as cores do sistema, modifique as variáveis abaixo.
+ * As cores usam o formato HSL (Hue Saturation Lightness) sem a função hsl().
+ * Exemplo: 220 90% 56% = hsl(220, 90%, 56%) = Azul
+ */
+
+:root {
+  /* ========================================
+   * CORES DA MARCA - Altere aqui para mudar o tema
+   * ======================================== */
+
+  /* Cor primária (azul) */
+  --brand-primary: 220 90% 56%;
+  --brand-primary-light: 220 90% 65%;
+  --brand-primary-dark: 220 90% 45%;
+
+  /* ========================================
+   * CORES SEMÂNTICAS - Light Mode
+   * ======================================== */
+
+  /* Fundos */
+  --background: 0 0% 100%;
+  --foreground: 222.2 84% 4.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 222.2 84% 4.9%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222.2 84% 4.9%;
+
+  /* Cores principais */
+  --primary: var(--brand-primary);
+  --primary-foreground: 0 0% 98%;
+  --secondary: 210 40% 96.1%;
+  --secondary-foreground: 222.2 47.4% 11.2%;
+
+  /* Estados */
+  --muted: 210 40% 96.1%;
+  --muted-foreground: 215.4 16.3% 46.9%;
+  --accent: 220 90% 96%;
+  --accent-foreground: 220 90% 15%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 210 40% 98%;
+
+  /* Bordas e inputs */
+  --border: 214.3 31.8% 91.4%;
+  --input: 214.3 31.8% 91.4%;
+  --ring: var(--brand-primary);
+  --radius: 0.75rem;
+
+  /* Status */
+  --success: 142 76% 36%;
+  --success-foreground: 355.7 100% 97.3%;
+  --warning: 32 95% 44%;
+  --warning-foreground: 355.7 100% 97.3%;
+
+  /* Cores para gráficos */
+  --chart-1: var(--brand-primary);
+  --chart-2: 210 40% 60%;
+  --chart-3: 142 76% 36%;
+  --chart-4: 32 95% 44%;
+  --chart-5: 280 65% 60%;
+
+  /* Sidebar */
+  --sidebar-background: 0 0% 98%;
+  --sidebar-foreground: 240 5.3% 26.1%;
+  --sidebar-primary: var(--brand-primary);
+  --sidebar-primary-foreground: 0 0% 98%;
+  --sidebar-accent: 220 90% 96%;
+  --sidebar-accent-foreground: 220 90% 15%;
+  --sidebar-border: 220 13% 91%;
+  --sidebar-ring: var(--brand-primary);
+}
+
+/* ========================================
+ * CORES SEMÂNTICAS - Dark Mode
+ * ======================================== */
+
+.dark {
+  --background: 222.2 84% 4.9%;
+  --foreground: 210 40% 98%;
+  --card: 222.2 84% 4.9%;
+  --card-foreground: 210 40% 98%;
+  --popover: 222.2 84% 4.9%;
+  --popover-foreground: 210 40% 98%;
+
+  --primary: var(--brand-primary);
+  --primary-foreground: 222.2 47.4% 11.2%;
+  --secondary: 217.2 32.6% 17.5%;
+  --secondary-foreground: 210 40% 98%;
+
+  --muted: 217.2 32.6% 17.5%;
+  --muted-foreground: 215 20.2% 65.1%;
+  --accent: 217.2 32.6% 17.5%;
+  --accent-foreground: 210 40% 98%;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 210 40% 98%;
+
+  --border: 217.2 32.6% 17.5%;
+  --input: 217.2 32.6% 17.5%;
+  --ring: var(--brand-primary);
+
+  --sidebar-background: 240 5.9% 10%;
+  --sidebar-foreground: 240 4.8% 95.9%;
+  --sidebar-primary: var(--brand-primary);
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 240 3.7% 15.9%;
+  --sidebar-accent-foreground: 240 4.8% 95.9%;
+  --sidebar-border: 240 3.7% 15.9%;
+  --sidebar-ring: var(--brand-primary);
+}

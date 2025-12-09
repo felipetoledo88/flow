@@ -19,7 +19,7 @@ const LoginForm = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    
+
     try {
       await login({ email, password });
       toast.success('Login realizado com sucesso!', {
@@ -31,10 +31,10 @@ const LoginForm = () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       let message = 'Erro ao fazer login. Tente novamente.';
-      
+
       if (error.response?.data?.message) {
-        const errorMessage = Array.isArray(error.response.data.message) 
-          ? error.response.data.message[0] 
+        const errorMessage = Array.isArray(error.response.data.message)
+          ? error.response.data.message[0]
           : error.response.data.message;
         switch (errorMessage) {
           case 'Email não encontrado':
@@ -50,7 +50,7 @@ const LoginForm = () => {
             message = errorMessage;
         }
       }
-      
+
       setError(message);
       toast.error(message, {
         duration: 3000, // 3 segundos
@@ -61,10 +61,25 @@ const LoginForm = () => {
   return (
     <div className="flex flex-row justify-center bg-white">
       {/* Left Side - Guide Left */}
-      <div className="fixed w-[43.26vw] h-screen top-0 left-0 bg-gradient-to-br from-red-600 via-red-700 to-red-800 hidden lg:block shadow-2xl">
-        <div className="absolute top-[37.78%] left-1/2 transform -translate-x-1/2 inline-flex flex-col items-center">
+      <div className="fixed w-[43.26vw] h-screen top-0 left-0 bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 hidden lg:block shadow-2xl">
+        <div className="absolute top-[37.78%] left-1/2 transform -translate-x-1/2 inline-flex flex-col items-center select-none pointer-events-none">
           <div className="relative flex flex-col items-center justify-center">
-            <img src="/images/logo.png" alt="ScopeFlow" className="h-40 w-auto object-contain drop-shadow-2xl" />
+            <span
+              className="text-8xl text-white"
+              style={{
+                fontFamily: "'Inter', sans-serif",
+                fontWeight: 800,
+                letterSpacing: '-0.05em'
+              }}
+            >
+              Flow
+            </span>
+            <span
+              className="text-white/60 text-sm mt-4 font-normal tracking-widest uppercase"
+              style={{ fontFamily: "'Inter', sans-serif" }}
+            >
+              Gestão de Projetos
+            </span>
           </div>
         </div>
       </div>
@@ -76,9 +91,9 @@ const LoginForm = () => {
             <h2 className="text-2xl font-bold text-black mb-2">Bem-vindo de volta!</h2>
             <p className="text-gray-600 text-sm">Faça login para acessar sua conta</p>
           </div>
-          
+
           <form onSubmit={handleLogin} className="min-h-[301px] inline-flex flex-col gap-5">
-            
+
             <div className="inline-flex flex-col items-start justify-center gap-2">
               <Label htmlFor="email" className="text-black text-base font-semibold">
                 E-mail
@@ -89,7 +104,7 @@ const LoginForm = () => {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="Digite seu e-mail"
-                className="flex w-[490px] items-center gap-2 px-3 py-3 bg-white border border-gray-300 rounded-[10px] text-sm hover:border-red-600 focus:border-red-500 focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                className="flex w-[490px] items-center gap-2 px-3 py-3 bg-white border border-gray-300 rounded-[10px] text-sm hover:border-blue-600 focus:border-blue-500 focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
                 required
               />
             </div>
@@ -105,7 +120,7 @@ const LoginForm = () => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Digite sua senha"
-                  className="flex w-[490px] items-center gap-2 px-3 py-3 pr-12 bg-white border border-gray-300 rounded-[10px] text-sm hover:border-red-600 focus:border-red-500 focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                  className="flex w-[490px] items-center gap-2 px-3 py-3 pr-12 bg-white border border-gray-300 rounded-[10px] text-sm hover:border-blue-600 focus:border-blue-500 focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
                   required
                 />
                 <button
@@ -125,7 +140,7 @@ const LoginForm = () => {
             <div className="h-5 flex justify-end">
               <Link
                 to="/forgot-password"
-                className="text-red-600 text-xs font-semibold hover:text-red-700 transition-colors"
+                className="text-blue-600 text-xs font-semibold hover:text-blue-700 transition-colors"
               >
                 Esqueceu sua senha?
               </Link>
@@ -135,7 +150,7 @@ const LoginForm = () => {
               <Button
                 type="submit"
                 disabled={isLoading}
-                className="inline-flex justify-center items-center gap-2 w-[480px] text-center px-12 py-3 bg-red-600 rounded-[10px] font-bold text-white text-sm hover:bg-red-700 disabled:opacity-50"
+                className="inline-flex justify-center items-center gap-2 w-[480px] text-center px-12 py-3 bg-blue-600 rounded-[10px] font-bold text-white text-sm hover:bg-blue-700 disabled:opacity-50"
               >
                 {isLoading ? 'Entrando...' : 'Login'}
               </Button>
@@ -153,14 +168,21 @@ const LoginForm = () => {
       {/* Mobile Layout */}
       <div className="lg:hidden">
         {/* Mobile Header */}
-        <div className="fixed w-full h-[20vh] top-0 left-0 bg-gradient-to-br from-red-600 via-red-700 to-red-800 shadow-lg">
-          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
-            <div className="flex items-center justify-center">
-              <img src="/images/logo.png" alt="ScopeFlow" className="h-24 w-auto object-contain drop-shadow-xl" />
-            </div>
+        <div className="fixed w-full h-[20vh] top-0 left-0 bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 shadow-lg">
+          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center select-none pointer-events-none">
+            <span
+              className="text-5xl text-white"
+              style={{
+                fontFamily: "'Inter', sans-serif",
+                fontWeight: 800,
+                letterSpacing: '-0.05em'
+              }}
+            >
+              Flow
+            </span>
           </div>
         </div>
-        
+
         {/* Mobile Content */}
         <div className="fixed w-full h-[80vh] top-[20vh] left-0 bg-white">
           <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-[490px] px-4">
@@ -168,9 +190,9 @@ const LoginForm = () => {
               <h2 className="text-xl font-bold text-black mb-2">Bem-vindo de volta!</h2>
               <p className="text-gray-600 text-sm">Faça login para acessar sua conta</p>
             </div>
-            
+
             <form onSubmit={handleLogin} className="flex flex-col gap-5">
-              
+
               <div className="flex flex-col gap-2">
                 <Label htmlFor="mobile-email" className="text-black text-base font-semibold">
                   E-mail
@@ -181,7 +203,7 @@ const LoginForm = () => {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="Digite seu e-mail"
-                  className="w-full px-3 py-3 bg-white border border-gray-300 rounded-[10px] text-sm hover:border-red-600 focus:border-red-500 focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                  className="w-full px-3 py-3 bg-white border border-gray-300 rounded-[10px] text-sm hover:border-blue-600 focus:border-blue-500 focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
                   required
                 />
               </div>
@@ -197,7 +219,7 @@ const LoginForm = () => {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Digite sua senha"
-                    className="w-full px-3 py-3 pr-12 bg-white border border-gray-300 rounded-[10px] text-sm hover:border-red-600 focus:border-red-500 focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                    className="w-full px-3 py-3 pr-12 bg-white border border-gray-300 rounded-[10px] text-sm hover:border-blue-600 focus:border-blue-500 focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
                     required
                   />
                   <button
@@ -217,7 +239,7 @@ const LoginForm = () => {
               <div className="flex justify-end">
                 <Link
                   to="/forgot-password"
-                  className="text-red-600 text-xs font-semibold hover:text-red-700 transition-colors"
+                  className="text-blue-600 text-xs font-semibold hover:text-blue-700 transition-colors"
                 >
                   Esqueceu sua senha?
                 </Link>
@@ -226,7 +248,7 @@ const LoginForm = () => {
               <Button
                 type="submit"
                 disabled={isLoading}
-                className="w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-[10px] font-bold text-sm"
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-[10px] font-bold text-sm"
               >
                 {isLoading ? 'Entrando...' : 'Login'}
               </Button>
