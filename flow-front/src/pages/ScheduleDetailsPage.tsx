@@ -578,7 +578,7 @@ const ScheduleDetailsPage = () => {
 
   const handleEditTask = (task: ScheduleTask) => {
     setSelectedTask(task);
-    setIsTaskModalOpen(true);
+    setTaskDetailsModal({ isOpen: true, task });
   };
 
   const handleUpdateHours = (task: ScheduleTask) => {
@@ -1966,9 +1966,7 @@ const ScheduleDetailsPage = () => {
           task={taskDetailsModal.task}
           isOpen={taskDetailsModal.isOpen}
           onClose={() => setTaskDetailsModal({ isOpen: false, task: null })}
-          onUpdate={handleTaskUpdate}
-          teamMembers={getTeamMembers()}
-          statuses={statuses}
+          onUpdateTask={handleTaskUpdate}
         />
       )}
     </div>
