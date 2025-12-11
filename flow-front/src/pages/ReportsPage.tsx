@@ -2,12 +2,12 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  MultiSelect,
+  MultiSelectContent,
+  MultiSelectItem,
+  MultiSelectTrigger,
+  MultiSelectValue,
+} from '@/components/ui/multi-select';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
@@ -19,15 +19,6 @@ import { userManagementService } from '@/services/api/user-management.service';
 import { ReportsOverview, TaskHoursItem } from '@/types/reports';
 import { Team } from '@/types/team';
 import { User } from '@/types/user-management';
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
 import * as XLSX from 'xlsx';
 import { Loader2, BarChart3, Download, Filter, Clock, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
@@ -45,9 +36,10 @@ const ReportsPage: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [assignees, setAssignees] = useState<User[]>([]);
-  const [selectedProject, setSelectedProject] = useState<string>('');
-  const [selectedTeam, setSelectedTeam] = useState<string>('');
-  const [selectedAssignee, setSelectedAssignee] = useState<string>('');
+  const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
+  const [selectedTeams, setSelectedTeams] = useState<string[]>([]);
+  const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [overview, setOverview] = useState<ReportsOverview | null>(null);
@@ -95,23 +87,49 @@ const ReportsPage: React.FC = () => {
   }, []);
 
   const buildFilters = () => {
-    const filters: Record<string, any> = {
+    return {
       startDate: startDate || undefined,
       endDate: endDate || undefined,
+      projectIds: selectedProjects,
+      teamIds: selectedTeams,
+      assigneeIds: selectedAssignees,
+      statusCodes: selectedStatuses,
     };
-
-    if (scope === 'project' && selectedProject) {
-      filters.projectId = Number(selectedProject);
-    }
-    if (scope === 'team' && selectedTeam) {
-      filters.teamId = Number(selectedTeam);
-    }
-    if (scope === 'assignee' && selectedAssignee) {
-      filters.assigneeId = Number(selectedAssignee);
-    }
-
-    return filters;
   };
+
+  const selectedProjectIds = useMemo(() => selectedProjects.map(Number), [selectedProjects]);
+
+  const availableTeams = useMemo(() => {
+    if (selectedProjectIds.length === 0) return teams;
+    const projectTeamIds = projects
+      .filter(p => selectedProjectIds.includes(p.id))
+      .map(p => p.team?.id)
+      .filter(Boolean) as number[];
+    return teams.filter(team => projectTeamIds.includes(team.id));
+  }, [selectedProjectIds, projects, teams]);
+
+  const availableAssignees = useMemo(() => {
+    if (selectedTeams.length === 0) return assignees;
+    const teamIds = selectedTeams.map(Number);
+    const members = teams
+      .filter(team => teamIds.includes(team.id))
+      .flatMap(team => team.members || []);
+    const unique = new Map<number, User>();
+    members.forEach(member => {
+      if (member.user) {
+        unique.set(member.user.id, member.user as User);
+      }
+    });
+    return Array.from(unique.values());
+  }, [assignees, selectedTeams, teams]);
+
+  useEffect(() => {
+    setSelectedTeams(prev => prev.filter(id => availableTeams.some(t => t.id.toString() === id)));
+  }, [availableTeams]);
+
+  useEffect(() => {
+    setSelectedAssignees(prev => prev.filter(id => availableAssignees.some(u => u.id.toString() === id)));
+  }, [availableAssignees]);
 
   const loadData = async () => {
     try {
@@ -218,129 +236,119 @@ const ReportsPage: React.FC = () => {
         />
         <main className="flex-1">
           <div className="p-6 space-y-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-sm text-muted-foreground">Relatórios Operacionais</p>
-                <h1 className="text-2xl font-semibold flex items-center gap-2">
-                  <BarChart3 className="h-5 w-5 text-blue-600" />
-                  Relatórios
-                </h1>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" onClick={handleExport} disabled={!overview || loading}>
-                  <Download className="h-4 w-4 mr-2" />
-                  Exportar Excel
-                </Button>
-                <Button onClick={loadData} disabled={loading}>
-                  {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  Atualizar
-                </Button>
-              </div>
-            </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-sm text-muted-foreground">Relatórios Operacionais</p>
+          <h1 className="text-2xl font-semibold flex items-center gap-2">
+            <BarChart3 className="h-5 w-5 text-blue-600" />
+            Relatórios
+          </h1>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={handleExport} disabled={!overview || loading}>
+            <Download className="h-4 w-4 mr-2" />
+            Exportar Excel
+          </Button>
+          <Button onClick={loadData} disabled={loading}>
+            {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            Atualizar
+          </Button>
+        </div>
+      </div>
 
             <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <Filter className="h-4 w-4" />
-                  Filtros
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Tabs value={scope} onValueChange={(val) => setScope(val as Scope)}>
-                  <TabsList className="grid grid-cols-3 w-full">
-                    <TabsTrigger value="project">Por Projeto</TabsTrigger>
-                    <TabsTrigger value="team">Por Equipe</TabsTrigger>
-                    <TabsTrigger value="assignee">Por Responsável</TabsTrigger>
-                  </TabsList>
-                </Tabs>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Filter className="h-4 w-4" />
+              Relatório de Horas Realizadas
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">Selecione projeto, equipe, responsáveis, status e período.</p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">Projetos</p>
+                <MultiSelect value={selectedProjects} onValueChange={setSelectedProjects} disabled={loadingOptions}>
+                  <MultiSelectTrigger>
+                    <MultiSelectValue placeholder="Selecione projetos" />
+                  </MultiSelectTrigger>
+                  <MultiSelectContent>
+                    {projects.map((project) => (
+                      <MultiSelectItem key={project.id} value={project.id.toString()}>
+                        {project.name}
+                      </MultiSelectItem>
+                    ))}
+                  </MultiSelectContent>
+                </MultiSelect>
+              </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  {scope === 'project' && (
-                    <div className="space-y-2">
-                      <p className="text-sm text-muted-foreground">Projeto</p>
-                      <Select
-                        value={selectedProject}
-                        onValueChange={setSelectedProject}
-                        disabled={loadingOptions}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione o projeto" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {projects.map((project) => (
-                            <SelectItem key={project.id} value={project.id.toString()}>
-                              {project.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">Equipes</p>
+                <MultiSelect value={selectedTeams} onValueChange={setSelectedTeams} disabled={loadingOptions}>
+                  <MultiSelectTrigger>
+                    <MultiSelectValue placeholder="Selecione equipes" />
+                  </MultiSelectTrigger>
+                  <MultiSelectContent>
+                    {availableTeams.map((team) => (
+                      <MultiSelectItem key={team.id} value={team.id.toString()}>
+                        {team.name}
+                      </MultiSelectItem>
+                    ))}
+                  </MultiSelectContent>
+                </MultiSelect>
+              </div>
 
-                  {scope === 'team' && (
-                    <div className="space-y-2">
-                      <p className="text-sm text-muted-foreground">Equipe</p>
-                      <Select
-                        value={selectedTeam}
-                        onValueChange={setSelectedTeam}
-                        disabled={loadingOptions}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione a equipe" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {teams.map((team) => (
-                            <SelectItem key={team.id} value={team.id.toString()}>
-                              {team.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">Responsáveis</p>
+                <MultiSelect value={selectedAssignees} onValueChange={setSelectedAssignees} disabled={loadingOptions}>
+                  <MultiSelectTrigger>
+                    <MultiSelectValue placeholder="Selecione responsáveis" />
+                  </MultiSelectTrigger>
+                  <MultiSelectContent>
+                    {availableAssignees.map((user) => (
+                      <MultiSelectItem key={user.id} value={user.id.toString()}>
+                        {user.name}
+                      </MultiSelectItem>
+                    ))}
+                  </MultiSelectContent>
+                </MultiSelect>
+              </div>
 
-                  {scope === 'assignee' && (
-                    <div className="space-y-2">
-                      <p className="text-sm text-muted-foreground">Responsável</p>
-                      <Select
-                        value={selectedAssignee}
-                        onValueChange={setSelectedAssignee}
-                        disabled={loadingOptions}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione o responsável" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {assignees.map((user) => (
-                            <SelectItem key={user.id} value={user.id.toString()}>
-                              {user.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">Status</p>
+                <MultiSelect value={selectedStatuses} onValueChange={setSelectedStatuses}>
+                  <MultiSelectTrigger>
+                    <MultiSelectValue placeholder="Selecione status" />
+                  </MultiSelectTrigger>
+                  <MultiSelectContent>
+                    <MultiSelectItem value="todo">A Fazer</MultiSelectItem>
+                    <MultiSelectItem value="in_progress">Em andamento</MultiSelectItem>
+                    <MultiSelectItem value="blocked">Bloqueado</MultiSelectItem>
+                    <MultiSelectItem value="completed">Concluído</MultiSelectItem>
+                  </MultiSelectContent>
+                </MultiSelect>
+              </div>
 
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">Início</p>
-                    <Input
-                      type="date"
-                      value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
-                    />
-                  </div>
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">Início</p>
+                <Input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                />
+              </div>
 
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">Fim</p>
-                    <Input
-                      type="date"
-                      value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">Fim</p>
+                <Input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
             {overview ? (
               <>
@@ -390,7 +398,7 @@ const ReportsPage: React.FC = () => {
                   </Card>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Card>
                     <CardHeader className="pb-2">
                       <CardTitle className="text-sm text-muted-foreground">Horas totais</CardTitle>
@@ -415,98 +423,6 @@ const ReportsPage: React.FC = () => {
                       <Badge variant="secondary">{overview.tasks.completed} concluídas</Badge>
                     </CardContent>
                   </Card>
-
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
-                        <AlertCircle className="h-4 w-4 text-orange-500" />
-                        Atrasos
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-3xl font-semibold">{overview.tasks.overdue}</p>
-                      <p className="text-xs text-muted-foreground">Atividades com prazo estourado</p>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center justify-between">
-                        <span>Horas por {scope === 'assignee' ? 'responsável' : scope === 'team' ? 'equipe' : 'projeto'}</span>
-                        <Badge variant="outline">{currentHoursData.length} itens</Badge>
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      {currentHoursData.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">Nenhum lançamento de horas no período.</p>
-                      ) : (
-                        <div className="space-y-2">
-                          {currentHoursData.map((item) => (
-                            <div
-                              key={
-                                scope === 'project'
-                                  ? item.projectId
-                                  : scope === 'team'
-                                  ? item.teamId
-                                  : item.assigneeId
-                              }
-                              className="flex items-center justify-between rounded-lg border p-3"
-                            >
-                              <div>
-                                <p className="font-medium">
-                                  {scope === 'project'
-                                    ? item.projectName || 'Sem projeto'
-                                    : scope === 'team'
-                                    ? item.teamName || 'Sem equipe'
-                                    : item.assigneeName || 'Sem responsável'}
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                  {item.hours.toFixed(2)}h registradas
-                                </p>
-                              </div>
-                              <Badge variant="secondary">{item.hours.toFixed(2)}h</Badge>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Gráfico de atrasos</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      {currentDelayData.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">Nenhuma atividade encontrada para o período.</p>
-                      ) : (
-                        <div className="h-64">
-                          <ResponsiveContainer>
-                            <BarChart
-                              data={currentDelayData.map((item: any) => ({
-                                label:
-                                  scope === 'assignee'
-                                    ? item.assigneeName || 'Sem responsável'
-                                    : item.teamName || 'Sem equipe',
-                                atrasadas: item.delayed,
-                                prazo: item.onTime,
-                              }))}
-                              margin={{ left: -10 }}
-                            >
-                              <CartesianGrid strokeDasharray="3 3" />
-                              <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-                              <YAxis />
-                              <Tooltip />
-                              <Bar dataKey="prazo" stackId="a" fill="#22c55e" />
-                              <Bar dataKey="atrasadas" stackId="a" fill="#f97316" />
-                            </BarChart>
-                          </ResponsiveContainer>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
                 </div>
 
                 <Card>
@@ -518,37 +434,33 @@ const ReportsPage: React.FC = () => {
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <div className="grid grid-cols-3 text-xs font-medium text-muted-foreground">
-                      <span>Referência</span>
-                      <span className="text-center">Horas</span>
-                      <span className="text-right">Participação</span>
+                      <span>Atividade</span>
+                      <span className="text-center">Responsável</span>
+                      <span className="text-right">Horas</span>
                     </div>
                     <Separator />
-                    {currentHoursData.length === 0 ? (
+                    {overview?.tasksByAssignee && Object.keys(overview.tasksByAssignee).length === 0 && (
                       <p className="text-sm text-muted-foreground">Nenhum dado para exibir.</p>
-                    ) : (
-                      <div className="space-y-2">
-                        {currentHoursData.map((item) => {
-                          const participation =
-                            overview && overview.hours.total > 0
-                              ? (item.hours / overview.hours.total) * 100
-                              : 0;
-                          return (
-                            <div
-                              key={`detail-${scope === 'project' ? item.projectId : scope === 'team' ? item.teamId : item.assigneeId}`}
-                              className="grid grid-cols-3 items-center gap-2 text-sm"
-                            >
-                              <span className="truncate">
-                                {scope === 'project'
-                                  ? item.projectName || 'Sem projeto'
-                                  : scope === 'team'
-                                  ? item.teamName || 'Sem equipe'
-                                  : item.assigneeName || 'Sem responsável'}
-                              </span>
-                              <span className="text-center font-medium">{item.hours.toFixed(2)}h</span>
-                              <span className="text-right text-muted-foreground">{participation.toFixed(1)}%</span>
+                    )}
+                    {overview?.tasksByAssignee && Object.values(overview.tasksByAssignee).length > 0 && (
+                      <div className="space-y-4">
+                        {Object.values(overview.tasksByAssignee).map(group => (
+                          <div key={group.assigneeName} className="space-y-2">
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="font-semibold">{group.assigneeName}</span>
+                              <span className="text-muted-foreground">{group.totalHours.toFixed(2)}h</span>
                             </div>
-                          );
-                        })}
+                            <div className="space-y-1">
+                              {group.tasks.map(task => (
+                                <div key={task.id} className="grid grid-cols-3 items-center gap-2 text-sm border rounded-md px-3 py-2">
+                                  <span className="truncate">{task.title}</span>
+                                  <span className="text-center">{task.assigneeName || '—'}</span>
+                                  <span className="text-right font-medium">{Number(task.actualHours || 0).toFixed(2)}h</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </CardContent>
