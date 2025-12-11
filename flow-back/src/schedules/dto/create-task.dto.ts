@@ -42,4 +42,8 @@ export class CreateTaskDto {
   @IsBoolean()
   @IsOptional()
   isBacklog?: boolean;
+
+  @IsNumber()
+  @IsOptional()
+  priority?: number;
 }

@@ -98,6 +98,7 @@ export interface Task {
   statusId: number;
   order: number;
   isBacklog?: boolean;
+  priority?: number;
   dependencies: TaskDependency[];
   dependents: TaskDependency[];
   comments?: TaskComment[];

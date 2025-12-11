@@ -38,9 +38,22 @@ export interface ReportsOverview {
     byTeam: DelayGroup[];
     byAssignee: DelayGroup[];
   };
+  tasksByAssignee?: Record<string, { assigneeName: string; totalHours: number; tasks: TaskHoursItem[] }>;
+  tasksByTeam?: Record<string, { teamName: string; totalHours: number; tasks: TaskHoursItem[] }>;
   tasks: {
     total: number;
     completed: number;
     overdue: number;
   };
+}
+
+export interface TaskHoursItem {
+  id: number;
+  title: string;
+  status: string;
+  estimatedHours: number;
+  actualHours: number;
+  assigneeName?: string | null;
+  teamName?: string | null;
+  endDate?: string | null;
 }

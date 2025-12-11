@@ -16,7 +16,7 @@ import { ReportsService } from '@/services/api/reports.service';
 import { ProjectsService, Project } from '@/services/api/projects.service';
 import TeamsService from '@/services/api/teams.service';
 import { userManagementService } from '@/services/api/user-management.service';
-import { ReportsOverview } from '@/types/reports';
+import { ReportsOverview, TaskHoursItem } from '@/types/reports';
 import { Team } from '@/types/team';
 import { User } from '@/types/user-management';
 import {
@@ -148,6 +148,17 @@ const ReportsPage: React.FC = () => {
     if (scope === 'project') return overview.delays.byTeam;
     if (scope === 'team') return overview.delays.byTeam;
     return overview.delays.byAssignee;
+  }, [overview, scope]);
+
+  const currentTaskHours = useMemo(() => {
+    if (!overview) return [];
+    if (scope === 'assignee' && overview.tasksByAssignee) {
+      return Object.values(overview.tasksByAssignee);
+    }
+    if (scope === 'team' && overview.tasksByTeam) {
+      return Object.values(overview.tasksByTeam);
+    }
+    return [];
   }, [overview, scope]);
 
   const handleExport = () => {
@@ -333,6 +344,52 @@ const ReportsPage: React.FC = () => {
 
             {overview ? (
               <>
+                {(scope === 'assignee' || scope === 'team') && currentTaskHours.length > 0 && (
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="flex items-center justify-between">
+                        <span>Atividades no período</span>
+                        <Badge variant="outline">
+                          {scope === 'assignee' ? 'Por responsável' : 'Por equipe'}
+                        </Badge>
+                      </CardTitle>
+                      <p className="text-sm text-muted-foreground">
+                        Período: {startDate} a {endDate}
+                      </p>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {currentTaskHours.map((group) => (
+                        <div key={group.assigneeName || group.teamName} className="border rounded-lg p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="font-medium">
+                                {scope === 'assignee' ? group.assigneeName : group.teamName}
+                              </p>
+                              <p className="text-xs text-muted-foreground">Total: {group.totalHours.toFixed(2)}h</p>
+                            </div>
+                            <Badge variant="secondary">{group.tasks.length} atividades</Badge>
+                          </div>
+
+                          <div className="space-y-2">
+                            {group.tasks.map((task: TaskHoursItem) => (
+                              <div key={task.id} className="flex items-center justify-between text-sm border rounded-md px-3 py-2">
+                                <div className="flex flex-col">
+                                  <span className="font-medium">{task.title}</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    Horas: {Number(task.actualHours || 0).toFixed(2)}h
+                                    {task.endDate ? ` • Prazo: ${task.endDate?.toString().slice(0,10)}` : ''}
+                                  </span>
+                                </div>
+                                <Badge variant="outline">{task.status}</Badge>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                )}
+
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <Card>
                     <CardHeader className="pb-2">

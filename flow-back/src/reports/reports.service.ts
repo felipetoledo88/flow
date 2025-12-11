@@ -25,6 +25,17 @@ interface DelayGroup {
   assigneeName?: string | null;
 }
 
+interface TaskHoursItem {
+  id: number;
+  title: string;
+  status: string;
+  estimatedHours: number;
+  actualHours: number;
+  assigneeName?: string | null;
+  teamName?: string | null;
+  endDate?: Date | null;
+}
+
 @Injectable()
 export class ReportsService {
   constructor(
@@ -212,6 +223,23 @@ export class ReportsService {
       .orderBy('assignee.name', 'ASC')
       .getRawMany()) as DelayGroup[];
 
+    const tasksWithHours = await this.applyTaskDateFilters(
+      taskBaseQuery.clone(),
+      normalizedFilters,
+    )
+      .select('task.id', 'id')
+      .addSelect('task.title', 'title')
+      .addSelect('status.code', 'status')
+      .addSelect('task.estimatedHours', 'estimatedHours')
+      .addSelect('task.actualHours', 'actualHours')
+      .addSelect('assignee.name', 'assigneeName')
+      .addSelect('team.name', 'teamName')
+      .addSelect('task.endDate', 'endDate')
+      .orderBy('team.name', 'ASC')
+      .addOrderBy('assignee.name', 'ASC')
+      .addOrderBy('task.endDate', 'ASC')
+      .getRawMany<TaskHoursItem>();
+
     const tasksSummary = await this.applyTaskDateFilters(
       taskBaseQuery.clone(),
       normalizedFilters,
@@ -258,6 +286,24 @@ export class ReportsService {
           total: Number(item.total || 0),
         })),
       },
+      tasksByAssignee: tasksWithHours.reduce<Record<string, any>>((acc, task) => {
+        const key = task.assigneeName || 'Sem responsável';
+        if (!acc[key]) {
+          acc[key] = { assigneeName: key, totalHours: 0, tasks: [] as TaskHoursItem[] };
+        }
+        acc[key].tasks.push(task);
+        acc[key].totalHours += Number(task.actualHours || 0);
+        return acc;
+      }, {}),
+      tasksByTeam: tasksWithHours.reduce<Record<string, any>>((acc, task) => {
+        const key = task.teamName || 'Sem equipe';
+        if (!acc[key]) {
+          acc[key] = { teamName: key, totalHours: 0, tasks: [] as TaskHoursItem[] };
+        }
+        acc[key].tasks.push(task);
+        acc[key].totalHours += Number(task.actualHours || 0);
+        return acc;
+      }, {}),
       tasks: {
         total: Number(tasksSummary?.total || 0),
         completed: Number(tasksSummary?.completed || 0),

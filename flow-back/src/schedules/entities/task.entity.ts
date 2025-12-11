@@ -90,6 +90,9 @@ export class Task {
   @Column({ type: 'boolean', default: false })
   isBacklog: boolean;
 
+  @Column({ type: 'int', default: 0 })
+  priority: number;
+
   @OneToMany(() => TaskDependency, (dependency) => dependency.task)
   dependencies: TaskDependency[];
 

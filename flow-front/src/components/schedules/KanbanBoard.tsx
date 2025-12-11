@@ -5,6 +5,7 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/h
 import { Task, TaskStatusEntity } from '@/types/schedule';
 import { useTaskStatus } from '@/hooks/use-task-status';
 import { TaskStatusService } from '@/services/api/task-status.service';
+import { SchedulesService } from '@/services/api/schedules.service';
 import { Clock, CheckCircle2, AlertTriangle, PlayCircle, Plus, AlertCircle, Calendar, CalendarX } from 'lucide-react';
 import CreateTaskStatusModal from './CreateTaskStatusModal';
 import EditTaskStatusModal from './EditTaskStatusModal';
@@ -308,7 +309,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, projectId, onTaskStatu
   // Sincronizar localTasks com as props tasks
   // Usar JSON.stringify para comparar o conteúdo real das tasks
   const tasksKey = React.useMemo(() => {
-    return JSON.stringify(tasks?.map(t => ({ id: t.id, statusId: t.status?.id, actualHours: t.actualHours })));
+    return JSON.stringify(tasks?.map(t => ({ id: t.id, statusId: t.status?.id, actualHours: t.actualHours, priority: (t as any).priority })));
   }, [tasks]);
 
   React.useEffect(() => {
@@ -355,7 +356,14 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, projectId, onTaskStatu
 
     return sortedStatuses.map((status, index) => {
       const colors = getStatusColorsFromEntity(status, index);
-      const statusTasks = filteredTasks.filter(task => task.status.id === status.id);
+      const statusTasks = filteredTasks
+        .filter(task => task.status.id === status.id)
+        .sort((a, b) => {
+          const pa = (a as any).priority ?? 0;
+          const pb = (b as any).priority ?? 0;
+          if (pa === pb) return a.id - b.id;
+          return pa - pb;
+        });
       return {
         id: status.id,
         code: status.code,
@@ -480,7 +488,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, projectId, onTaskStatu
     }
 
     const currentTask = filteredTasks.find(t => t.id === taskId);
-    if (!currentTask || currentTask.status.id === newStatusId) {
+    if (!currentTask) {
       setActiveTask(null);
       setActiveColumn(null);
       return;
@@ -496,36 +504,93 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ tasks, projectId, onTaskStatu
       return;
     }
 
-    if (newStatus) {
-      setLocalTasks(prevTasks =>
-        prevTasks.map(task =>
-          task.id === taskId
-            ? { ...task, status: newStatus, statusId: newStatusId }
-            : task
+    const reorderWithinColumn = async (statusId: number) => {
+      const tasksInColumn = localTasks
+        .filter(t => t.status.id === statusId)
+        .sort((a, b) => ((a as any).priority ?? 0) - ((b as any).priority ?? 0));
+
+      const activeIndex = tasksInColumn.findIndex(t => t.id === taskId);
+      const overIndex = tasksInColumn.findIndex(t => t.id.toString() === over.id.toString());
+      if (activeIndex === -1 || overIndex === -1) return;
+
+      const updated = [...tasksInColumn];
+      const [moved] = updated.splice(activeIndex, 1);
+      updated.splice(overIndex, 0, moved);
+
+      const withPriority = updated.map((task, index) => ({ ...task, priority: index + 1 }));
+      setLocalTasks(prev =>
+        prev.map(t => {
+          const found = withPriority.find(u => u.id === t.id);
+          return found ? { ...t, priority: found.priority } : t;
+        })
+      );
+
+      await Promise.all(
+        withPriority.map(task =>
+          SchedulesService.updateTask(task.id, { priority: task.priority })
         )
       );
-    }
+    };
+
+    const reorderAcrossColumns = async (fromStatusId: number, toStatusId: number) => {
+      const fromTasks = localTasks
+        .filter(t => t.status.id === fromStatusId && t.id !== taskId)
+        .sort((a, b) => ((a as any).priority ?? 0) - ((b as any).priority ?? 0));
+
+      const toTasksBase = localTasks
+        .filter(t => t.status.id === toStatusId)
+        .sort((a, b) => ((a as any).priority ?? 0) - ((b as any).priority ?? 0));
+
+      let targetIndex = toTasksBase.findIndex(t => t.id.toString() === over.id.toString());
+      if (targetIndex === -1) targetIndex = toTasksBase.length;
+
+      const movedTask = { ...currentTask, status: newStatus!, statusId: toStatusId };
+      const toTasks = [...toTasksBase];
+      toTasks.splice(targetIndex, 0, movedTask);
+
+      const toWithPriority = toTasks.map((task, index) => ({ ...task, priority: index + 1 }));
+      const fromWithPriority = fromTasks.map((task, index) => ({ ...task, priority: index + 1 }));
+
+      setLocalTasks(prev =>
+        prev.map(t => {
+          const inTo = toWithPriority.find(u => u.id === t.id);
+          if (inTo) return { ...t, status: newStatus!, statusId: toStatusId, priority: inTo.priority };
+          const inFrom = fromWithPriority.find(u => u.id === t.id);
+          if (inFrom) return { ...t, priority: inFrom.priority };
+          return t;
+        })
+      );
+
+      await onTaskStatusChange(taskId, toStatusId);
+
+      await Promise.all([
+        ...toWithPriority.map(task =>
+          SchedulesService.updateTask(task.id, { priority: task.priority })
+        ),
+        ...fromWithPriority.map(task =>
+          SchedulesService.updateTask(task.id, { priority: task.priority })
+        ),
+      ]);
+    };
 
     try {
-      await onTaskStatusChange(taskId, newStatusId);
+      if (newStatusId === currentTask.status.id) {
+        await reorderWithinColumn(newStatusId);
+      } else if (newStatus) {
+        await reorderAcrossColumns(currentTask.status.id, newStatusId);
+      }
     } catch (error) {
-      console.error('Erro ao atualizar status da tarefa:', error);
-      setLocalTasks(prevTasks =>
-        prevTasks.map(task =>
-          task.id === taskId
-            ? { ...task, status: currentTask.status, statusId: currentTask.status.id }
-            : task
-        )
-      );
+      console.error('Erro ao reordenar tarefas:', error);
       toast({
-        title: "Erro ao atualizar status",
-        description: "Não foi possível atualizar o status da tarefa. Tente novamente.",
+        title: "Erro ao reordenar",
+        description: "Não foi possível salvar a nova ordem. Tente novamente.",
         variant: "destructive",
       });
+      await refreshStatuses();
+    } finally {
+      setActiveTask(null);
+      setActiveColumn(null);
     }
-
-    setActiveTask(null);
-    setActiveColumn(null);
   };
 
   const handleStatusCreated = async () => {
