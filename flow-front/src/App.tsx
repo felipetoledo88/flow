@@ -18,6 +18,7 @@ import NotFound from "./pages/NotFound";
 import { ProtectedRoute } from "./components/auth/ProtectedRoute";
 import { AuthProvider } from "./components/auth/AuthProvider";
 import AppLayout from "./components/layout/AppLayout";
+import ReportsPage from "./pages/ReportsPage";
 
 const queryClient = new QueryClient();
 
@@ -62,6 +63,13 @@ const App = () => (
               <ProtectedRoute allowedRoles={['admin', 'manager', 'techlead']}>
                 <AppLayout>
                   <TeamsPage />
+                </AppLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/reports" element={
+              <ProtectedRoute allowedRoles={['admin', 'manager', 'techlead', 'user', 'qa']}>
+                <AppLayout>
+                  <ReportsPage />
                 </AppLayout>
               </ProtectedRoute>
             } />

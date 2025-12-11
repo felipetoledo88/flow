@@ -28,6 +28,7 @@ import { StatusSprintSeed } from './database/seeds/status-sprint.seed';
 import { CreateStatusSprintTableAndRelation } from './migrations/createStatusSprintTableAndRelation';
 import { PopulateStatusSprintTable } from './migrations/populateStatusSprintTable';
 import { FilesController } from './files/files.controller';
+import { ReportsModule } from './reports/reports.module';
 
 @Module({
   imports: [
@@ -70,6 +71,7 @@ import { FilesController } from './files/files.controller';
     TeamsModule,
     SchedulesModule,
     SprintsModule,
+    ReportsModule,
   ],
   controllers: [AppController, FilesController],
   providers: [
