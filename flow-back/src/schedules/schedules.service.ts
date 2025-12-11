@@ -877,6 +877,59 @@ export class SchedulesService {
   }
 
   /**
+   * Remove múltiplas tarefas em lote e recalcula as datas dos desenvolvedores afetados.
+   * @param taskIds Array de IDs das tarefas a serem removidas
+   */
+  async removeTasksBulk(taskIds: number[]): Promise<{ deletedCount: number }> {
+    if (!taskIds || taskIds.length === 0) {
+      throw new BadRequestException('Nenhuma tarefa para excluir');
+    }
+
+    // Buscar todas as tarefas pelos IDs
+    const tasks = await this.taskRepository.find({
+      where: taskIds.map((id) => ({ id })),
+      relations: ['project'],
+    });
+
+    if (tasks.length === 0) {
+      throw new NotFoundException('Nenhuma das tarefas informadas foi encontrada');
+    }
+
+    // Agrupar por assignee e project para recálculo posterior
+    const affectedAssignees = new Map<
+      string,
+      { assigneeId: number; projectId: number }
+    >();
+
+    for (const task of tasks) {
+      const key = `${task.assigneeId}-${task.projectId}`;
+      affectedAssignees.set(key, {
+        assigneeId: task.assigneeId,
+        projectId: task.projectId,
+      });
+    }
+
+    // Soft delete de todas as tarefas encontradas
+    const foundTaskIds = tasks.map((t) => t.id);
+    await this.taskRepository.softDelete(foundTaskIds);
+
+    // Recalcular para cada assignee afetado
+    for (const { assigneeId, projectId } of affectedAssignees.values()) {
+      await this.recalculateAllTasksOfAssignee(assigneeId, projectId);
+    }
+
+    // Atualizar data fim prevista do projeto (pegar o primeiro projectId encontrado)
+    if (tasks.length > 0) {
+      const projectIds = new Set(tasks.map((t) => t.projectId));
+      for (const projectId of projectIds) {
+        await this.updateProjectActualExpectedEndDate(projectId);
+      }
+    }
+
+    return { deletedCount: foundTaskIds.length };
+  }
+
+  /**
    * Valida se todos os IDs referenciados existem no banco de dados
    */
   private async validateImportData(

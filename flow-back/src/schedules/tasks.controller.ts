@@ -26,6 +26,7 @@ import { SchedulesService } from './schedules.service';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { UpdateTaskHoursDto } from './dto/update-task-hours.dto';
 import { CreateTaskCommentDto } from './dto/create-task-comment.dto';
+import { DeleteTasksBulkDto } from './dto/delete-tasks-bulk.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -77,6 +78,12 @@ export class TasksController {
     } catch (error) {
       throw error;
     }
+  }
+
+  @Post('bulk-delete')
+  @HttpCode(HttpStatus.OK)
+  async removeTasksBulk(@Body() deleteTasksBulkDto: DeleteTasksBulkDto) {
+    return this.schedulesService.removeTasksBulk(deleteTasksBulkDto.taskIds);
   }
 
   @Patch(':id/hours')

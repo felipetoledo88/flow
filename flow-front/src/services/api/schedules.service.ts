@@ -108,6 +108,11 @@ export class SchedulesService {
     await api.delete(`/tasks/${taskId}`);
   }
 
+  static async deleteTasksBulk(taskIds: number[]): Promise<{ deletedCount: number }> {
+    const response = await api.post<{ deletedCount: number }>('/tasks/bulk-delete', { taskIds });
+    return response.data;
+  }
+
   static async updateTaskBacklogStatus(
     taskId: number,
     isBacklog: boolean

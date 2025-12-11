@@ -136,6 +136,10 @@ const ScheduleDetailsPage = () => {
   const { setSelectedProject, setShowAllProjects } = useProjectStore();
   const [sprintFilter, setSprintFilter] = useState<string>('all');
 
+  // Estado para seleção múltipla de tarefas
+  const [selectedTasks, setSelectedTasks] = useState<Set<number>>(new Set());
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
+
   // Estado para o modal de detalhes da tarefa (usado no cronograma)
   const [taskDetailsModal, setTaskDetailsModal] = useState<{ isOpen: boolean; task: ScheduleTask | null }>({
     isOpen: false,
@@ -604,6 +608,97 @@ const ScheduleDetailsPage = () => {
     }
   };
 
+  // Funções de seleção múltipla
+  const toggleTaskSelection = (taskId: number) => {
+    setSelectedTasks(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(taskId)) {
+        newSet.delete(taskId);
+      } else {
+        newSet.add(taskId);
+      }
+      return newSet;
+    });
+  };
+
+  const selectAllInContainer = (containerId: string) => {
+    let containerTasks: ScheduleTask[] = [];
+
+    if (containerId === 'backlog') {
+      containerTasks = getFilteredBacklogTasks();
+    } else if (containerId.startsWith('sprint-')) {
+      const sprintId = parseInt(containerId.replace('sprint-', ''));
+      containerTasks = getSprintTasks(sprintId);
+    }
+
+    setSelectedTasks(prev => {
+      const newSet = new Set(prev);
+      const allSelected = containerTasks.every(t => newSet.has(t.id));
+
+      if (allSelected) {
+        // Desmarcar todos
+        containerTasks.forEach(t => newSet.delete(t.id));
+      } else {
+        // Marcar todos
+        containerTasks.forEach(t => newSet.add(t.id));
+      }
+      return newSet;
+    });
+  };
+
+  const clearTaskSelection = () => setSelectedTasks(new Set());
+
+  const handleBulkDelete = async () => {
+    if (selectedTasks.size === 0) return;
+    setBulkDeleteDialogOpen(true);
+  };
+
+  const confirmBulkDelete = async () => {
+    if (selectedTasks.size === 0) return;
+
+    try {
+      const taskIds = Array.from(selectedTasks);
+      const result = await SchedulesService.deleteTasksBulk(taskIds);
+      toast.success(`${result.deletedCount} atividade(s) excluída(s) com sucesso`);
+      clearTaskSelection();
+      await loadScheduleData(false);
+      await refreshDashboard();
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || error.message || 'Erro ao excluir atividades';
+      toast.error(errorMessage);
+    } finally {
+      setBulkDeleteDialogOpen(false);
+    }
+  };
+
+  const isAllSelectedInContainer = (containerId: string): boolean => {
+    let containerTasks: ScheduleTask[] = [];
+
+    if (containerId === 'backlog') {
+      containerTasks = getFilteredBacklogTasks();
+    } else if (containerId.startsWith('sprint-')) {
+      const sprintId = parseInt(containerId.replace('sprint-', ''));
+      containerTasks = getSprintTasks(sprintId);
+    }
+
+    if (containerTasks.length === 0) return false;
+    return containerTasks.every(t => selectedTasks.has(t.id));
+  };
+
+  const isSomeSelectedInContainer = (containerId: string): boolean => {
+    let containerTasks: ScheduleTask[] = [];
+
+    if (containerId === 'backlog') {
+      containerTasks = getFilteredBacklogTasks();
+    } else if (containerId.startsWith('sprint-')) {
+      const sprintId = parseInt(containerId.replace('sprint-', ''));
+      containerTasks = getSprintTasks(sprintId);
+    }
+
+    if (containerTasks.length === 0) return false;
+    return containerTasks.some(t => selectedTasks.has(t.id)) && !containerTasks.every(t => selectedTasks.has(t.id));
+  };
+
   const onTaskSaved = async (taskWasCompleted?: boolean, forceRecalculate?: boolean) => {
     setIsTaskModalOpen(false);
     setIsHoursModalOpen(false);
@@ -936,59 +1031,82 @@ const ScheduleDetailsPage = () => {
     }
   };
 
-  const handleFastReorder = async (sourceId: string, targetId: string, insertPosition: 'before' | 'after') => {
+  const handleFastReorder = async (sourceId: string, targetId: string, insertPosition: 'before' | 'after', additionalIds?: string[]) => {
     try {
+      // Combinar IDs se houver múltiplos (drag múltiplo)
+      const allSourceIds = additionalIds ? [sourceId, ...additionalIds] : [sourceId];
+
       const sourceTask = getAllTasks().find(t => t.id.toString() === sourceId);
       const targetTask = getAllTasks().find(t => t.id.toString() === targetId);
       if (!sourceTask || !targetTask) {
         return;
       }
 
+      // Limpar seleção após o drag
+      if (additionalIds && additionalIds.length > 0) {
+        clearTaskSelection();
+      }
+
       const isSourceInBacklog = sourceTask.isBacklog;
       const isTargetInBacklog = targetTask.isBacklog;
-      
+
       if (isSourceInBacklog && isTargetInBacklog) {
         const sortedBacklog = setBacklogTasks().sort((a, b) => a.order - b.order);
-        const sourceIndex = sortedBacklog.findIndex(t => t.id.toString() === sourceId);
-        const targetIndex = sortedBacklog.findIndex(t => t.id.toString() === targetId);
-        if (sourceIndex === -1 || targetIndex === -1) return;
-        const newIndex = insertPosition === 'before' ? targetIndex : targetIndex + 1;
-        const reorderedTasks = [...sortedBacklog];
-        const [movedTask] = reorderedTasks.splice(sourceIndex, 1);
-        reorderedTasks.splice(newIndex > sourceIndex ? newIndex - 1 : newIndex, 0, movedTask);
+
+        // Filtrar as tarefas que estão sendo movidas
+        const tasksToMove = sortedBacklog.filter(t => allSourceIds.includes(t.id.toString()));
+        const remainingTasks = sortedBacklog.filter(t => !allSourceIds.includes(t.id.toString()));
+
+        const targetIndex = remainingTasks.findIndex(t => t.id.toString() === targetId);
+        if (targetIndex === -1 && !allSourceIds.includes(targetId)) return;
+
+        // Calcular nova posição
+        const actualTargetIndex = allSourceIds.includes(targetId)
+          ? 0
+          : insertPosition === 'before' ? targetIndex : targetIndex + 1;
+
+        // Inserir todas as tarefas na nova posição
+        const reorderedTasks = [...remainingTasks];
+        reorderedTasks.splice(actualTargetIndex, 0, ...tasksToMove);
+
         const reorderData = reorderedTasks.map((task, index) => ({
           taskId: task.id,
           newOrder: index
         }));
-        
+
         await SchedulesService.reorderTasks(parseInt(id!), reorderData);
         await refreshTasksOnly();
-        toast.success('Ordem das atividades no backlog atualizada!');
+        toast.success(allSourceIds.length > 1
+          ? `${allSourceIds.length} atividades reordenadas no backlog!`
+          : 'Ordem das atividades no backlog atualizada!');
       } else if (!isSourceInBacklog && !isTargetInBacklog && sourceTask.sprintId === targetTask.sprintId) {
-        const sprintTasks = [...(schedule?.tasks || [])].filter(t => 
+        const sprintTasks = [...(schedule?.tasks || [])].filter(t =>
           t.sprintId === sourceTask.sprintId && !t.isBacklog
         ).sort((a, b) => a.order - b.order);
-        
-        const sourceSprintIndex = sprintTasks.findIndex(t => t.id.toString() === sourceId);
-        const targetSprintIndex = sprintTasks.findIndex(t => t.id.toString() === targetId);
-        
-        if (sourceSprintIndex === -1 || targetSprintIndex === -1) return;
-        
-        const newSprintIndex = insertPosition === 'before' ? targetSprintIndex : targetSprintIndex + 1;
-        const reorderedSprintTasks = [...sprintTasks];
-        const [movedTask] = reorderedSprintTasks.splice(sourceSprintIndex, 1);
-        reorderedSprintTasks.splice(newSprintIndex > sourceSprintIndex ? newSprintIndex - 1 : newSprintIndex, 0, movedTask);
-        
+
+        // Filtrar as tarefas que estão sendo movidas
+        const tasksToMove = sprintTasks.filter(t => allSourceIds.includes(t.id.toString()));
+        const remainingTasks = sprintTasks.filter(t => !allSourceIds.includes(t.id.toString()));
+
+        const targetIndex = remainingTasks.findIndex(t => t.id.toString() === targetId);
+        if (targetIndex === -1 && !allSourceIds.includes(targetId)) return;
+
+        // Calcular nova posição
+        const actualTargetIndex = allSourceIds.includes(targetId)
+          ? 0
+          : insertPosition === 'before' ? targetIndex : targetIndex + 1;
+
+        // Inserir todas as tarefas na nova posição
+        const reorderedSprintTasks = [...remainingTasks];
+        reorderedSprintTasks.splice(actualTargetIndex, 0, ...tasksToMove);
+
         // Recalcular apenas a ordem dentro da sprint, preservando a ordem global existente
-        const reorderData = reorderedSprintTasks.map((task, sprintIndex) => {
-          // Encontrar a menor ordem global disponível para esta sprint
-          const baseOrder = Math.min(...sprintTasks.map(t => t.order));
-          return {
-            taskId: task.id,
-            newOrder: baseOrder + sprintIndex
-          };
-        });
-        
+        const baseOrder = Math.min(...sprintTasks.map(t => t.order));
+        const reorderData = reorderedSprintTasks.map((task, sprintIndex) => ({
+          taskId: task.id,
+          newOrder: baseOrder + sprintIndex
+        }));
+
         if (schedule) {
           const updatedSchedule = { ...schedule };
           reorderData.forEach(({ taskId, newOrder }) => {
@@ -999,17 +1117,20 @@ const ScheduleDetailsPage = () => {
           });
           setSchedule(updatedSchedule);
         }
-        
+
         await SchedulesService.reorderTasks(parseInt(id!), reorderData);
         await refreshTasksOnly();
         const sprint = sprints.find(s => s.id === sourceTask.sprintId);
-        toast.success(`Ordem das atividades na sprint "${sprint?.name}" atualizada!`);
-        
+        toast.success(allSourceIds.length > 1
+          ? `${allSourceIds.length} atividades reordenadas na sprint "${sprint?.name}"!`
+          : `Ordem das atividades na sprint "${sprint?.name}" atualizada!`);
+
       } else {
         const sourceContainerId = isSourceInBacklog ? 'backlog' : `sprint-${sourceTask.sprintId}`;
         const targetContainerId = isTargetInBacklog ? 'backlog' : `sprint-${targetTask.sprintId}`;
         if (sourceContainerId !== targetContainerId) {
-          await handleFastMove(sourceTask.id, targetContainerId);
+          const draggedIds = Array.from(new Set(allSourceIds.map(id => parseInt(id))));
+          await handleFastMove(draggedIds, targetContainerId);
         }
       }
     } catch (error) {
@@ -1018,24 +1139,32 @@ const ScheduleDetailsPage = () => {
     }
   };
 
-  const handleFastMove = async (taskId: number, targetContainerId: string) => {
+  const handleFastMove = async (taskIds: number[], targetContainerId: string) => {
     try {
-      const task = getAllTasks().find(t => t.id === taskId);
-      if (!task) {
+      const uniqueIds = Array.from(new Set(taskIds));
+      const tasksToMove = getAllTasks().filter(t => uniqueIds.includes(t.id));
+      if (tasksToMove.length === 0) {
         return;
       }
-      if (targetContainerId === 'backlog') {
-        const originalActualHours = task.actualHours;
-        const originalEstimatedHours = task.estimatedHours;
-        
-        if (task.sprintId) {
-          const sprint = sprints.find(s => s.id === task.sprintId);
-          await SchedulesService.updateTaskSprint(taskId, null);
-          const updatedTask = await SchedulesService.updateTaskBacklogStatus(taskId, true);
 
-          if ((updatedTask.actualHours === 0 || updatedTask.actualHours === 0 || updatedTask.actualHours === 0.00) && originalActualHours && Number(originalActualHours) > 0) {
+      // Ordenar para manter a sequência relativa ao mover em grupo
+      const tasksInOrder = [...tasksToMove].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+      if (targetContainerId === 'backlog') {
+        for (const task of tasksInOrder) {
+          const originalActualHours = task.actualHours;
+          const originalEstimatedHours = task.estimatedHours;
+          
+          if (task.sprintId) {
+            await SchedulesService.updateTaskSprint(task.id, null);
+          }
+
+          const updatedTask = await SchedulesService.updateTaskBacklogStatus(task.id, true);
+
+          // Garantir que horas não sejam zeradas pelo backend
+          if ((updatedTask.actualHours === 0 || updatedTask.actualHours === 0.00) && originalActualHours && Number(originalActualHours) > 0) {
             try {
-              await SchedulesService.updateTask(taskId, {
+              await SchedulesService.updateTask(task.id, {
                 actualHours: Number(originalActualHours),
                 estimatedHours: originalEstimatedHours ? Number(originalEstimatedHours) : undefined
               });
@@ -1043,42 +1172,35 @@ const ScheduleDetailsPage = () => {
               console.error(`[DEBUG] Drag&Drop - Erro ao restaurar horas:`, restoreError);
             }
           }
-          
-          toast.success(`Atividade removida da sprint "${sprint?.name}" e movida para o backlog!`);
-        } else {
-          const updatedTask = await SchedulesService.updateTaskBacklogStatus(taskId, true);
-          if ((updatedTask.actualHours === 0 || updatedTask.actualHours === 0 || updatedTask.actualHours === 0.00) && originalActualHours && Number(originalActualHours) > 0) {
-            try {
-              await SchedulesService.updateTask(taskId, {
-                actualHours: Number(originalActualHours),
-                estimatedHours: originalEstimatedHours ? Number(originalEstimatedHours) : undefined
-              });
-            } catch (restoreError) {
-              console.error(`[DEBUG] Drag&Drop - Erro ao restaurar horas:`, restoreError);
-            }
-          }
-          
-          toast.success('Atividade movida para o backlog!');
         }
+
+        toast.success(tasksInOrder.length > 1
+          ? `${tasksInOrder.length} atividades movidas para o backlog!`
+          : 'Atividade movida para o backlog!');
       } else if (targetContainerId.startsWith('sprint-')) {
         const sprintId = parseInt(targetContainerId.replace('sprint-', ''));
         const targetSprint = sprints.find(s => s.id === sprintId);
-        if (task.isBacklog) {
-          await SchedulesService.updateTaskBacklogStatus(taskId, false);
-          await SchedulesService.updateTaskSprint(taskId, sprintId);
-          toast.success(`Atividade movida do backlog para a sprint "${targetSprint?.name}"!`);
-        } else if (task.sprintId && task.sprintId !== sprintId) {
-          const sourceSprint = sprints.find(s => s.id === task.sprintId);
-          await SchedulesService.updateTaskSprint(taskId, sprintId);
-          toast.success(`Atividade movida da sprint "${sourceSprint?.name}" para "${targetSprint?.name}"!`);
-        }
-      }
-      await refreshTasksOnly();
+        const sprintName = targetSprint?.name || 'sprint selecionada';
 
-      if (targetContainerId === 'backlog') {
-        const taskAfter = getAllTasks().find(t => t.id === taskId);
+        for (const task of tasksInOrder) {
+          if (task.isBacklog) {
+            await SchedulesService.updateTaskBacklogStatus(task.id, false);
+            await SchedulesService.updateTaskSprint(task.id, sprintId);
+          } else if (task.sprintId && task.sprintId !== sprintId) {
+            await SchedulesService.updateTaskSprint(task.id, sprintId);
+          }
+        }
+
+        toast.success(tasksInOrder.length > 1
+          ? `${tasksInOrder.length} atividades movidas para a sprint "${sprintName}"!`
+          : `Atividade movida para a sprint "${sprintName}"!`);
       }
-      
+
+      if (tasksInOrder.length > 1) {
+        clearTaskSelection();
+      }
+
+      await refreshTasksOnly();
     } catch (error) {
       toast.error('Erro ao mover atividade. Tente novamente.');
       await refreshTasksOnly();
@@ -1592,6 +1714,11 @@ const ScheduleDetailsPage = () => {
                                   statuses={statuses}
                                   maxVisible={50}
                                   onTaskClick={handleTaskClick}
+                                  selectedTasks={selectedTasks}
+                                  onToggleSelection={toggleTaskSelection}
+                                  onSelectAll={selectAllInContainer}
+                                  isAllSelected={isAllSelectedInContainer(`sprint-${sprint.id}`)}
+                                  isSomeSelected={isSomeSelectedInContainer(`sprint-${sprint.id}`)}
                                 />
                               ) : (
                                 <div className="text-center py-8">
@@ -1653,6 +1780,11 @@ const ScheduleDetailsPage = () => {
                                 statuses={statuses}
                                 maxVisible={50}
                                 onTaskClick={handleTaskClick}
+                                selectedTasks={selectedTasks}
+                                onToggleSelection={toggleTaskSelection}
+                                onSelectAll={selectAllInContainer}
+                                isAllSelected={isAllSelectedInContainer('backlog')}
+                                isSomeSelected={isSomeSelectedInContainer('backlog')}
                               />
                             ) : (
                               <BacklogDropZone />
@@ -1678,6 +1810,28 @@ const ScheduleDetailsPage = () => {
           </div>
         </main>
       </div>
+
+      {/* Barra de ações flutuante para seleção múltipla */}
+      {selectedTasks.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-white shadow-lg rounded-lg p-4 flex items-center gap-4 border z-50">
+          <span className="text-sm font-medium">{selectedTasks.size} atividade(s) selecionada(s)</span>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={handleBulkDelete}
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Excluir
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={clearTaskSelection}
+          >
+            Cancelar
+          </Button>
+        </div>
+      )}
 
       {/* Modals */}
       <ScheduleFormModal
@@ -1770,6 +1924,28 @@ const ScheduleDetailsPage = () => {
               className="bg-destructive hover:bg-destructive/90"
             >
               Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Dialog de exclusão em lote */}
+      <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Exclusão em Lote</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir {selectedTasks.size} atividade(s)?
+              Esta ação não pode ser desfeita e as datas das atividades restantes serão recalculadas automaticamente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmBulkDelete}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              Excluir {selectedTasks.size} atividade(s)
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -3,13 +3,14 @@ import { formatHoursToDisplay } from '@/lib/time-utils';
 
 interface FastReorderContextProps {
   children: React.ReactNode;
-  onReorder: (sourceId: string, targetId: string, insertPosition: 'before' | 'after') => Promise<void>;
-  onMove: (taskId: number, targetContainerId: string) => Promise<void>;
+  onReorder: (sourceId: string, targetId: string, insertPosition: 'before' | 'after', additionalIds?: string[]) => Promise<void>;
+  onMove: (taskIds: number[], targetContainerId: string) => Promise<void>;
 }
 
 interface DragState {
   isDragging: boolean;
   draggedItemId: string | null;
+  draggedItemIds: string[]; // Array para múltiplos itens
   draggedFromContainer: string | null;
   hoverItemId: string | null;
   hoverPosition: 'before' | 'after' | null;
@@ -20,11 +21,12 @@ interface DragState {
     status: string;
     estimatedHours: string;
   } | null;
+  draggedCount: number; // Quantidade de itens sendo arrastados
 }
 
 const FastReorderContext = React.createContext<{
   dragState: DragState;
-  startDrag: (itemId: string, containerId: string, event: React.MouseEvent, taskInfo?: { title: string; assigneeName?: string; status: string; estimatedHours: string }) => void;
+  startDrag: (itemId: string, containerId: string, event: React.MouseEvent, taskInfo?: { title: string; assigneeName?: string; status: string; estimatedHours: string }, selectedTasks?: Set<number>) => void;
   endDrag: () => void;
   updateHover: (itemId: string | null, position: 'before' | 'after' | null) => void;
   updateCursor: (x: number, y: number) => void;
@@ -38,30 +40,49 @@ export const FastReorderProvider: React.FC<FastReorderContextProps> = ({
   const [dragState, setDragState] = useState<DragState>({
     isDragging: false,
     draggedItemId: null,
+    draggedItemIds: [],
     draggedFromContainer: null,
     hoverItemId: null,
     hoverPosition: null,
     cursorPosition: { x: 0, y: 0 },
     draggedTaskInfo: null,
+    draggedCount: 0,
   });
 
   const dragTimeoutRef = useRef<NodeJS.Timeout>();
 
-  const startDrag = useCallback((itemId: string, containerId: string, event: React.MouseEvent, taskInfo?: { title: string; assigneeName?: string; status: string; estimatedHours: string }) => {
+  const startDrag = useCallback((
+    itemId: string,
+    containerId: string,
+    event: React.MouseEvent,
+    taskInfo?: { title: string; assigneeName?: string; status: string; estimatedHours: string },
+    selectedTasks?: Set<number>
+  ) => {
     event.preventDefault();
-    
+
     // Debounce para evitar drag acidental
     if (dragTimeoutRef.current) clearTimeout(dragTimeoutRef.current);
-    
+
     dragTimeoutRef.current = setTimeout(() => {
+      // Se o item clicado está selecionado e há múltiplas seleções, arrastar todos
+      const itemIdNum = parseInt(itemId);
+      let draggedIds: string[] = [itemId];
+
+      if (selectedTasks && selectedTasks.size > 0 && selectedTasks.has(itemIdNum)) {
+        // Arrastar todos os selecionados
+        draggedIds = Array.from(selectedTasks).map(id => id.toString());
+      }
+
       setDragState({
         isDragging: true,
         draggedItemId: itemId,
+        draggedItemIds: draggedIds,
         draggedFromContainer: containerId,
         hoverItemId: null,
         hoverPosition: null,
         cursorPosition: { x: event.clientX, y: event.clientY },
         draggedTaskInfo: taskInfo || null,
+        draggedCount: draggedIds.length,
       });
 
       const handleMouseMove = (e: MouseEvent) => {
@@ -77,34 +98,52 @@ export const FastReorderProvider: React.FC<FastReorderContextProps> = ({
             setTimeout(async () => {
               try {
                 let targetContainerId = '';
-                if (currentState.hoverItemId.includes('-drop')) {
-                  targetContainerId = currentState.hoverItemId.replace('-drop', '');
+                if (currentState.hoverItemId!.includes('-drop')) {
+                  targetContainerId = currentState.hoverItemId!.replace('-drop', '');
                 } else {
-                  await onReorder(currentState.draggedItemId, currentState.hoverItemId, currentState.hoverPosition);
+                  // Reordenar - passar IDs adicionais se houver múltiplos
+                  const additionalIds = currentState.draggedItemIds.filter(id => id !== currentState.draggedItemId);
+                  await onReorder(
+                    currentState.draggedItemId!,
+                    currentState.hoverItemId!,
+                    currentState.hoverPosition!,
+                    additionalIds.length > 0 ? additionalIds : undefined
+                  );
                   return;
                 }
-                
+
                 // Se chegou aqui, é movimento entre containers
                 if (currentState.draggedFromContainer !== targetContainerId) {
-                  await onMove(parseInt(currentState.draggedItemId), targetContainerId);
+                  const draggedIds = Array.from(
+                    new Set(currentState.draggedItemIds.map(id => parseInt(id)))
+                  );
+                  await onMove(draggedIds, targetContainerId);
                 } else {
-                  await onReorder(currentState.draggedItemId, currentState.hoverItemId, currentState.hoverPosition);
+                  const additionalIds = currentState.draggedItemIds.filter(id => id !== currentState.draggedItemId);
+                  await onReorder(
+                    currentState.draggedItemId!,
+                    currentState.hoverItemId!,
+                    currentState.hoverPosition!,
+                    additionalIds.length > 0 ? additionalIds : undefined
+                  );
                 }
               } catch (error) {
                 console.error('Erro na reorganização:', error);
               }
             }, 0);
           }
-          
+
           // Retornar o estado resetado
           return {
             isDragging: false,
             draggedItemId: null,
+            draggedItemIds: [],
             draggedFromContainer: null,
             hoverItemId: null,
             hoverPosition: null,
             cursorPosition: { x: 0, y: 0 },
             draggedTaskInfo: null,
+            draggedCount: 0,
           };
         });
 
@@ -124,17 +163,19 @@ export const FastReorderProvider: React.FC<FastReorderContextProps> = ({
     setDragState({
       isDragging: false,
       draggedItemId: null,
+      draggedItemIds: [],
       draggedFromContainer: null,
       hoverItemId: null,
       hoverPosition: null,
       cursorPosition: { x: 0, y: 0 },
       draggedTaskInfo: null,
+      draggedCount: 0,
     });
   }, []);
 
   const updateHover = useCallback((itemId: string | null, position: 'before' | 'after' | null) => {
     if (!dragState.isDragging) return;
-    
+
     setDragState(prev => ({
       ...prev,
       hoverItemId: itemId,
@@ -144,7 +185,7 @@ export const FastReorderProvider: React.FC<FastReorderContextProps> = ({
 
   const updateCursor = useCallback((x: number, y: number) => {
     if (!dragState.isDragging) return;
-    
+
     setDragState(prev => ({
       ...prev,
       cursorPosition: { x, y },
@@ -181,32 +222,44 @@ export const FastReorderProvider: React.FC<FastReorderContextProps> = ({
             top: dragState.cursorPosition.y - 20,
           }}
         >
-          <div className="bg-white border-2 border-blue-500 rounded-lg p-3 shadow-lg min-w-[200px] max-w-[300px]">
+          <div className="bg-white border-2 border-blue-500 rounded-lg p-3 shadow-lg min-w-[200px] max-w-[300px] relative">
+            {/* Badge de quantidade se múltiplos */}
+            {dragState.draggedCount > 1 && (
+              <div className="absolute -top-2 -right-2 bg-blue-600 text-white rounded-full min-w-[24px] h-6 flex items-center justify-center text-xs font-bold px-1.5">
+                {dragState.draggedCount}
+              </div>
+            )}
+
             <div className="flex items-center gap-2 mb-2">
               <div className="w-3 h-3 bg-blue-500 rounded-full flex-shrink-0"></div>
               <h3 className="font-medium text-sm text-gray-900 truncate">
-                {dragState.draggedTaskInfo.title}
+                {dragState.draggedCount > 1
+                  ? `${dragState.draggedCount} atividades selecionadas`
+                  : dragState.draggedTaskInfo.title
+                }
               </h3>
             </div>
-            
-            <div className="space-y-1 text-xs text-gray-600">
-              {dragState.draggedTaskInfo.assigneeName && (
+
+            {dragState.draggedCount === 1 && (
+              <div className="space-y-1 text-xs text-gray-600">
+                {dragState.draggedTaskInfo.assigneeName && (
+                  <div className="flex items-center gap-1">
+                    <span className="text-gray-500">👤</span>
+                    <span>{dragState.draggedTaskInfo.assigneeName}</span>
+                  </div>
+                )}
+
                 <div className="flex items-center gap-1">
-                  <span className="text-gray-500">👤</span>
-                  <span>{dragState.draggedTaskInfo.assigneeName}</span>
+                  <span className="text-gray-500">📊</span>
+                  <span>{dragState.draggedTaskInfo.status}</span>
                 </div>
-              )}
-              
-              <div className="flex items-center gap-1">
-                <span className="text-gray-500">📊</span>
-                <span>{dragState.draggedTaskInfo.status}</span>
+
+                <div className="flex items-center gap-1">
+                  <span className="text-gray-500">⏱️</span>
+                  <span>{formatHoursToDisplay(dragState.draggedTaskInfo.estimatedHours)}</span>
+                </div>
               </div>
-              
-              <div className="flex items-center gap-1">
-                <span className="text-gray-500">⏱️</span>
-                <span>{formatHoursToDisplay(dragState.draggedTaskInfo.estimatedHours)}</span>
-              </div>
-            </div>
+            )}
           </div>
         </div>
       )}
@@ -226,6 +279,7 @@ interface FastReorderItemProps {
     status: string;
     estimatedHours: string;
   };
+  selectedTasks?: Set<number>; // Para saber quais tarefas estão selecionadas
 }
 
 export const FastReorderItem: React.FC<FastReorderItemProps> = ({
@@ -235,17 +289,22 @@ export const FastReorderItem: React.FC<FastReorderItemProps> = ({
   className = '',
   dragHandleSelector,
   taskInfo,
+  selectedTasks,
 }) => {
   const context = React.useContext(FastReorderContext);
   const elementRef = useRef<HTMLDivElement>(null);
-  
+
   if (!context) {
     throw new Error('FastReorderItem deve ser usado dentro de FastReorderProvider');
   }
 
   const { dragState, startDrag, updateHover } = context;
-  
-  const isBeingDragged = dragState.isDragging && dragState.draggedItemId === id;
+
+  // Verificar se este item está sendo arrastado (individual ou em grupo)
+  const isBeingDragged = dragState.isDragging && (
+    dragState.draggedItemId === id ||
+    dragState.draggedItemIds.includes(id)
+  );
   const isHovering = dragState.hoverItemId === id;
 
   const handleMouseDown = useCallback((event: React.MouseEvent) => {
@@ -253,19 +312,21 @@ export const FastReorderItem: React.FC<FastReorderItemProps> = ({
     if (dragHandleSelector) {
       const target = event.target as HTMLElement;
       const handle = target.closest(dragHandleSelector);
-      
+
       // Se não clicou no handle, não iniciar o drag
       if (!handle) {
         return;
       }
     }
-    
+
     event.preventDefault();
-    startDrag(id, containerId, event, taskInfo);
-  }, [id, containerId, startDrag, taskInfo, dragHandleSelector]);
+    startDrag(id, containerId, event, taskInfo, selectedTasks);
+  }, [id, containerId, startDrag, taskInfo, dragHandleSelector, selectedTasks]);
 
   const handleMouseEnter = useCallback((event: React.MouseEvent) => {
-    if (!dragState.isDragging || dragState.draggedItemId === id) return;
+    if (!dragState.isDragging) return;
+    // Não mostrar hover se o item está sendo arrastado
+    if (dragState.draggedItemId === id || dragState.draggedItemIds.includes(id)) return;
 
     const rect = elementRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -274,7 +335,7 @@ export const FastReorderItem: React.FC<FastReorderItemProps> = ({
     const centerY = rect.top + rect.height / 2;
     const position = mouseY < centerY ? 'before' : 'after';
     updateHover(id, position);
-  }, [dragState.isDragging, dragState.draggedItemId, id, updateHover]);
+  }, [dragState.isDragging, dragState.draggedItemId, dragState.draggedItemIds, id, updateHover]);
 
   const handleMouseLeave = useCallback(() => {
     if (dragState.isDragging) {
@@ -287,29 +348,29 @@ export const FastReorderItem: React.FC<FastReorderItemProps> = ({
       {/* Linha de inserção antes */}
       {isHovering && dragState.hoverPosition === 'before' && (
         <tr className="h-1">
-          <td colSpan={9} className="p-0 relative">
+          <td colSpan={11} className="p-0 relative">
             <div className="absolute inset-x-2 top-0 h-0.5 bg-blue-500 z-10" />
           </td>
         </tr>
       )}
-      
+
       {React.cloneElement(children as React.ReactElement, {
         ref: elementRef,
         className: `${(children as React.ReactElement).props.className || ''} ${className} ${isBeingDragged ? 'opacity-30' : ''}`,
         onMouseDown: handleMouseDown,
         onMouseEnter: handleMouseEnter,
         onMouseLeave: handleMouseLeave,
-        style: { 
-          userSelect: 'none', 
+        style: {
+          userSelect: 'none',
           cursor: dragHandleSelector ? 'default' : 'grab',
-          ...(children as React.ReactElement).props.style 
+          ...(children as React.ReactElement).props.style
         },
       })}
 
       {/* Linha de inserção depois */}
       {isHovering && dragState.hoverPosition === 'after' && (
         <tr className="h-1">
-          <td colSpan={9} className="p-0 relative">
+          <td colSpan={11} className="p-0 relative">
             <div className="absolute inset-x-2 bottom-0 h-0.5 bg-blue-500 z-10" />
           </td>
         </tr>
@@ -330,7 +391,7 @@ export const FastReorderContainer: React.FC<FastReorderContainerProps> = ({
   className = '',
 }) => {
   const context = React.useContext(FastReorderContext);
-  
+
   if (!context) {
     throw new Error('FastReorderContainer deve ser usado dentro de FastReorderProvider');
   }

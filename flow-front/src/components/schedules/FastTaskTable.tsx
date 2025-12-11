@@ -10,6 +10,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -33,6 +34,7 @@ import {
   Package,
   Copy,
   Check,
+  Minus,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Sprint } from '@/types';
@@ -57,6 +59,10 @@ interface FastTaskRowProps {
   handleSprintChange?: (taskId: number, sprintId: number | null, moveToBacklog: boolean) => void;
   statuses: TaskStatusEntity[];
   onTaskClick?: (task: ScheduleTask) => void;
+  // Props de seleção múltipla
+  isSelected?: boolean;
+  onToggleSelection?: (taskId: number) => void;
+  selectedTasks?: Set<number>;
 }
 
 const FastTaskRow = memo<FastTaskRowProps>(({
@@ -77,6 +83,9 @@ const FastTaskRow = memo<FastTaskRowProps>(({
   handleSprintChange,
   statuses,
   onTaskClick,
+  isSelected = false,
+  onToggleSelection,
+  selectedTasks,
 }) => {
   const [copied, setCopied] = React.useState(false);
 
@@ -97,11 +106,18 @@ const FastTaskRow = memo<FastTaskRowProps>(({
       target.closest('[role="combobox"]') ||
       target.closest('[role="listbox"]') ||
       target.closest('[data-radix-collection-item]') ||
-      target.closest('.drag-handle')
+      target.closest('.drag-handle') ||
+      target.closest('[role="checkbox"]') ||
+      target.closest('.checkbox-cell')
     ) {
       return;
     }
     onTaskClick?.(task);
+  };
+
+  const handleCheckboxChange = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onToggleSelection?.(task.id);
   };
 
   const taskInfo = {
@@ -112,17 +128,24 @@ const FastTaskRow = memo<FastTaskRowProps>(({
   };
 
   return (
-    <FastReorderItem 
-      id={task.id.toString()} 
+    <FastReorderItem
+      id={task.id.toString()}
       containerId={containerId}
       taskInfo={taskInfo}
       dragHandleSelector=".drag-handle"
+      selectedTasks={selectedTasks}
     >
       <TableRow
-        className="select-none cursor-pointer hover:bg-muted/50 transition-colors"
+        className={`select-none cursor-pointer hover:bg-muted/50 transition-colors ${isSelected ? 'bg-blue-50' : ''}`}
         onClick={handleRowClick}
       >
-        <TableCell className="w-16 font-medium">
+        <TableCell className="w-10 checkbox-cell" onClick={handleCheckboxChange}>
+          <Checkbox
+            checked={isSelected}
+            className="data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
+          />
+        </TableCell>
+        <TableCell className="w-12 font-medium">
           <div className="flex items-center gap-2">
             <div className="drag-handle w-4 h-4 flex items-center justify-center text-muted-foreground cursor-grab hover:text-gray-700 transition-colors">
               ⋮⋮
@@ -263,8 +286,8 @@ const FastTaskRow = memo<FastTaskRowProps>(({
         </TableCell>
         <TableCell className="w-20 xl:w-36 text-right">
           <div className="flex items-center justify-end gap-0.5">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               size="sm"
               onClick={() => handleUpdateHours(task)}
               className="h-7 px-1 text-xs"
@@ -321,6 +344,12 @@ interface FastTaskTableProps {
   statuses: TaskStatusEntity[];
   maxVisible?: number;
   onTaskClick?: (task: ScheduleTask) => void;
+  // Props de seleção múltipla
+  selectedTasks?: Set<number>;
+  onToggleSelection?: (taskId: number) => void;
+  onSelectAll?: (containerId: string) => void;
+  isAllSelected?: boolean;
+  isSomeSelected?: boolean;
 }
 
 export const FastTaskTable = memo<FastTaskTableProps>(({
@@ -341,13 +370,39 @@ export const FastTaskTable = memo<FastTaskTableProps>(({
   handleSprintChange,
   statuses,
   onTaskClick,
+  selectedTasks = new Set(),
+  onToggleSelection,
+  onSelectAll,
+  isAllSelected = false,
+  isSomeSelected = false,
 }) => {
+  const handleSelectAllClick = () => {
+    onSelectAll?.(containerId);
+  };
+
   return (
     <FastReorderContainer id={containerId}>
       <Table className="table-fixed w-full">
         <TableHeader>
           <TableRow>
-            <TableHead className="w-16">#</TableHead>
+            <TableHead className="w-10">
+              <div
+                className="flex items-center justify-center cursor-pointer"
+                onClick={handleSelectAllClick}
+              >
+                {isSomeSelected ? (
+                  <div className="h-4 w-4 rounded border border-blue-600 bg-blue-600 flex items-center justify-center">
+                    <Minus className="h-3 w-3 text-white" />
+                  </div>
+                ) : (
+                  <Checkbox
+                    checked={isAllSelected}
+                    className="data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
+                  />
+                )}
+              </div>
+            </TableHead>
+            <TableHead className="w-12">#</TableHead>
             <TableHead className="w-32 xl:w-48">Título</TableHead>
             <TableHead className="w-28 xl:w-36">Responsável</TableHead>
             <TableHead className="w-32 2xl:hidden">Data</TableHead>
@@ -381,6 +436,9 @@ export const FastTaskTable = memo<FastTaskTableProps>(({
               handleSprintChange={handleSprintChange}
               statuses={statuses}
               onTaskClick={onTaskClick}
+              isSelected={selectedTasks.has(task.id)}
+              onToggleSelection={onToggleSelection}
+              selectedTasks={selectedTasks}
             />
           ))}
         </TableBody>
