@@ -2,8 +2,14 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, SelectQueryBuilder, ObjectLiteral } from 'typeorm';
 import { ReportsFilterDto } from './dto/reports-filter.dto';
+import {
+  DailyHoursReportDto,
+  DailyHoursEntry,
+  AssigneeDailyHours,
+} from './dto/daily-hours-report.dto';
 import { Task } from '../schedules/entities/task.entity';
 import { TaskHoursHistory } from '../schedules/entities/task-hours-history.entity';
+import { TeamMember } from '../teams/entities/team-member.entity';
 
 interface HoursGroup {
   hours: number;
@@ -43,6 +49,8 @@ export class ReportsService {
     private readonly taskRepository: Repository<Task>,
     @InjectRepository(TaskHoursHistory)
     private readonly historyRepository: Repository<TaskHoursHistory>,
+    @InjectRepository(TeamMember)
+    private readonly teamMemberRepository: Repository<TeamMember>,
   ) {}
 
   private applyFilters<T extends ObjectLiteral>(
@@ -317,6 +325,330 @@ export class ReportsService {
         total: Number(tasksSummary?.total || 0),
         completed: Number(tasksSummary?.completed || 0),
         overdue: Number(tasksSummary?.overdue || 0),
+      },
+    };
+  }
+
+  private getDayName(dayOfWeek: number): string {
+    const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+    return days[dayOfWeek] || '';
+  }
+
+  private getDatesBetween(startDate: Date, endDate: Date): Date[] {
+    const dates: Date[] = [];
+    const current = new Date(startDate);
+    while (current <= endDate) {
+      dates.push(new Date(current));
+      current.setDate(current.getDate() + 1);
+    }
+    return dates;
+  }
+
+  async getDailyHoursReport(filters: ReportsFilterDto): Promise<DailyHoursReportDto> {
+    const { startDate, endDate, teamIds, assigneeIds } = filters;
+
+    if (!startDate || !endDate) {
+      return {
+        assignees: [],
+        summary: {
+          totalExpected: 0,
+          totalLogged: 0,
+          completionPercentage: 0,
+          daysWithGaps: 0,
+          daysComplete: 0,
+        },
+      };
+    }
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+
+    // Limita o fim ao dia atual (não faz sentido verificar dias futuros)
+    const effectiveEnd = end > today ? today : end;
+
+    // Busca os membros de equipe com suas configurações de horas
+    const teamMembersQuery = this.teamMemberRepository
+      .createQueryBuilder('tm')
+      .leftJoinAndSelect('tm.user', 'user')
+      .leftJoinAndSelect('tm.team', 'team')
+      .where('tm.isActive = :isActive', { isActive: true });
+
+    if (teamIds?.length) {
+      teamMembersQuery.andWhere('tm.teamId IN (:...teamIds)', { teamIds });
+    }
+
+    if (assigneeIds?.length) {
+      teamMembersQuery.andWhere('tm.userId IN (:...assigneeIds)', { assigneeIds });
+    }
+
+    const teamMembers = await teamMembersQuery.getMany();
+
+    // Busca os lançamentos de horas agrupados por dia e responsável da tarefa
+    const historyQuery = this.historyRepository
+      .createQueryBuilder('history')
+      .leftJoin('history.task', 'task')
+      .select('task.assigneeId', 'userId')
+      .addSelect('DATE(history.createdAt)', 'date')
+      .addSelect('SUM(history.hoursChanged)', 'totalHours')
+      .where('history.createdAt >= :startDate', { startDate: start.toISOString() })
+      .andWhere('history.createdAt <= :endDate', { endDate: effectiveEnd.toISOString() })
+      .andWhere('task.assigneeId IS NOT NULL')
+      .groupBy('task.assigneeId')
+      .addGroupBy('DATE(history.createdAt)');
+
+    if (assigneeIds?.length) {
+      historyQuery.andWhere('task.assigneeId IN (:...assigneeIds)', { assigneeIds });
+    }
+
+    const historyRecords = await historyQuery.getRawMany<{
+      userId: number;
+      date: string | Date;
+      totalHours: string;
+    }>();
+
+    // DEBUG: Log para verificar os registros encontrados
+    console.log('=== DEBUG Daily Hours ===');
+    console.log('Filtros:', { startDate: start.toISOString(), endDate: effectiveEnd.toISOString(), assigneeIds });
+    console.log('Registros encontrados:', historyRecords);
+    console.log('Team Members:', teamMembers.map(m => ({ userId: m.userId, name: m.user?.name })));
+    console.log('=========================');
+
+    // Cria um mapa de horas lançadas por usuário e data
+    const hoursMap = new Map<string, number>();
+    for (const record of historyRecords) {
+      // Normaliza a data para formato YYYY-MM-DD
+      let dateStr: string;
+      if (record.date instanceof Date) {
+        dateStr = record.date.toISOString().slice(0, 10);
+      } else if (typeof record.date === 'string') {
+        // Pode vir como "2025-12-11" ou "2025-12-11T00:00:00.000Z"
+        dateStr = record.date.slice(0, 10);
+      } else {
+        dateStr = String(record.date).slice(0, 10);
+      }
+      const key = `${record.userId}-${dateStr}`;
+      hoursMap.set(key, Number(record.totalHours || 0));
+    }
+
+    // Gera o relatório por colaborador
+    const dates = this.getDatesBetween(start, effectiveEnd);
+    const assigneesReport: AssigneeDailyHours[] = [];
+
+    // Agrupa membros por userId (pode estar em múltiplas equipes)
+    const userConfigMap = new Map<number, { dailyWorkHours: number; workDays: number[]; userName: string }>();
+    for (const member of teamMembers) {
+      if (!userConfigMap.has(member.userId)) {
+        userConfigMap.set(member.userId, {
+          dailyWorkHours: Number(member.dailyWorkHours),
+          workDays: Array.isArray(member.workDays)
+            ? member.workDays.map(d => Number(d))
+            : [],
+          userName: member.user?.name || 'Sem nome',
+        });
+      }
+    }
+
+    let totalExpected = 0;
+    let totalLogged = 0;
+    let daysWithGaps = 0;
+    let daysComplete = 0;
+
+    for (const [userId, config] of userConfigMap) {
+      const days: DailyHoursEntry[] = [];
+      let assigneeTotalExpected = 0;
+      let assigneeTotalLogged = 0;
+
+      for (const date of dates) {
+        const dayOfWeek = date.getDay();
+        const isWorkDay = config.workDays.includes(dayOfWeek);
+        const dateStr = date.toISOString().slice(0, 10);
+        const key = `${userId}-${dateStr}`;
+        const loggedHours = hoursMap.get(key) || 0;
+        const expectedHours = isWorkDay ? config.dailyWorkHours : 0;
+        const hasGap = isWorkDay && loggedHours < expectedHours;
+
+        days.push({
+          date: dateStr,
+          dayOfWeek,
+          dayName: this.getDayName(dayOfWeek),
+          expectedHours,
+          loggedHours,
+          isWorkDay,
+          hasGap,
+        });
+
+        if (isWorkDay) {
+          assigneeTotalExpected += expectedHours;
+          assigneeTotalLogged += loggedHours;
+          totalExpected += expectedHours;
+          totalLogged += loggedHours;
+
+          if (hasGap) {
+            daysWithGaps++;
+          } else {
+            daysComplete++;
+          }
+        }
+      }
+
+      const completionPercentage = assigneeTotalExpected > 0
+        ? Math.round((assigneeTotalLogged / assigneeTotalExpected) * 100)
+        : 0;
+
+      assigneesReport.push({
+        assigneeId: userId,
+        assigneeName: config.userName,
+        dailyWorkHours: config.dailyWorkHours,
+        workDays: config.workDays,
+        days,
+        totalExpected: assigneeTotalExpected,
+        totalLogged: assigneeTotalLogged,
+        completionPercentage,
+      });
+    }
+
+    // Ordena por nome
+    assigneesReport.sort((a, b) => a.assigneeName.localeCompare(b.assigneeName));
+
+    const overallCompletion = totalExpected > 0
+      ? Math.round((totalLogged / totalExpected) * 100)
+      : 0;
+
+    return {
+      assignees: assigneesReport,
+      summary: {
+        totalExpected,
+        totalLogged,
+        completionPercentage: overallCompletion,
+        daysWithGaps,
+        daysComplete,
+      },
+    };
+  }
+
+  async getMyDailyHoursReport(userId: number): Promise<DailyHoursReportDto> {
+    // Calcula o período do mês atual
+    const now = new Date();
+    const startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+    // Limita ao dia atual
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    const effectiveEnd = endDate > today ? today : endDate;
+
+    // Busca o TeamMember do usuário
+    const teamMember = await this.teamMemberRepository.findOne({
+      where: { userId, isActive: true },
+      relations: ['user'],
+    });
+
+    if (!teamMember) {
+      return {
+        assignees: [],
+        summary: {
+          totalExpected: 0,
+          totalLogged: 0,
+          completionPercentage: 0,
+          daysWithGaps: 0,
+          daysComplete: 0,
+        },
+      };
+    }
+
+    // Busca os lançamentos de horas do usuário no mês
+    const historyRecords = await this.historyRepository
+      .createQueryBuilder('history')
+      .leftJoin('history.task', 'task')
+      .select('task.assigneeId', 'userId')
+      .addSelect('DATE(history.createdAt)', 'date')
+      .addSelect('SUM(history.hoursChanged)', 'totalHours')
+      .where('history.createdAt >= :startDate', { startDate: startDate.toISOString() })
+      .andWhere('history.createdAt <= :endDate', { endDate: effectiveEnd.toISOString() })
+      .andWhere('task.assigneeId = :userId', { userId })
+      .groupBy('task.assigneeId')
+      .addGroupBy('DATE(history.createdAt)')
+      .getRawMany<{ userId: number; date: string | Date; totalHours: string }>();
+
+    // Cria mapa de horas
+    const hoursMap = new Map<string, number>();
+    for (const record of historyRecords) {
+      let dateStr: string;
+      if (record.date instanceof Date) {
+        dateStr = record.date.toISOString().slice(0, 10);
+      } else if (typeof record.date === 'string') {
+        dateStr = record.date.slice(0, 10);
+      } else {
+        dateStr = String(record.date).slice(0, 10);
+      }
+      hoursMap.set(dateStr, Number(record.totalHours || 0));
+    }
+
+    // Gera o relatório
+    const dates = this.getDatesBetween(startDate, effectiveEnd);
+    const dailyWorkHours = Number(teamMember.dailyWorkHours);
+    const workDays = Array.isArray(teamMember.workDays)
+      ? teamMember.workDays.map(d => Number(d))
+      : [];
+
+    const days: DailyHoursEntry[] = [];
+    let totalExpected = 0;
+    let totalLogged = 0;
+    let daysWithGaps = 0;
+    let daysComplete = 0;
+
+    for (const date of dates) {
+      const dayOfWeek = date.getDay();
+      const isWorkDay = workDays.includes(dayOfWeek);
+      const dateStr = date.toISOString().slice(0, 10);
+      const loggedHours = hoursMap.get(dateStr) || 0;
+      const expectedHours = isWorkDay ? dailyWorkHours : 0;
+      const hasGap = isWorkDay && loggedHours < expectedHours;
+
+      days.push({
+        date: dateStr,
+        dayOfWeek,
+        dayName: this.getDayName(dayOfWeek),
+        expectedHours,
+        loggedHours,
+        isWorkDay,
+        hasGap,
+      });
+
+      if (isWorkDay) {
+        totalExpected += expectedHours;
+        totalLogged += loggedHours;
+        if (hasGap) {
+          daysWithGaps++;
+        } else {
+          daysComplete++;
+        }
+      }
+    }
+
+    const completionPercentage = totalExpected > 0
+      ? Math.round((totalLogged / totalExpected) * 100)
+      : 0;
+
+    return {
+      assignees: [{
+        assigneeId: userId,
+        assigneeName: teamMember.user?.name || 'Você',
+        dailyWorkHours,
+        workDays,
+        days,
+        totalExpected,
+        totalLogged,
+        completionPercentage,
+      }],
+      summary: {
+        totalExpected,
+        totalLogged,
+        completionPercentage,
+        daysWithGaps,
+        daysComplete,
       },
     };
   }

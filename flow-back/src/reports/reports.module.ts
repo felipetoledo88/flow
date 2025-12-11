@@ -6,6 +6,7 @@ import { Task } from '../schedules/entities/task.entity';
 import { TaskHoursHistory } from '../schedules/entities/task-hours-history.entity';
 import { Project } from '../projects/entities/project.entity';
 import { Team } from '../teams/entities/team.entity';
+import { TeamMember } from '../teams/entities/team-member.entity';
 import { User } from '../users/entities/user.entity';
 
 @Module({
@@ -15,6 +16,7 @@ import { User } from '../users/entities/user.entity';
       TaskHoursHistory,
       Project,
       Team,
+      TeamMember,
       User,
     ]),
   ],
