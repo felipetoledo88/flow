@@ -1,5 +1,5 @@
-import { IsDateString, IsInt, IsOptional } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsDateString, IsInt, IsOptional, IsArray, IsString } from 'class-validator';
+import { Type, Transform } from 'class-transformer';
 
 export class ReportsFilterDto {
   @IsOptional()
@@ -11,17 +11,46 @@ export class ReportsFilterDto {
   endDate?: string;
 
   @IsOptional()
+  @IsArray()
   @Type(() => Number)
-  @IsInt()
-  projectId?: number;
+  @Transform(({ value }) => {
+    if (!value) return [];
+    if (Array.isArray(value)) return value;
+    if (typeof value === 'string') return value.split(',').filter(Boolean).map(Number);
+    return [];
+  })
+  projectIds?: number[];
 
   @IsOptional()
+  @IsArray()
   @Type(() => Number)
-  @IsInt()
-  teamId?: number;
+  @Transform(({ value }) => {
+    if (!value) return [];
+    if (Array.isArray(value)) return value;
+    if (typeof value === 'string') return value.split(',').filter(Boolean).map(Number);
+    return [];
+  })
+  teamIds?: number[];
 
   @IsOptional()
+  @IsArray()
   @Type(() => Number)
-  @IsInt()
-  assigneeId?: number;
+  @Transform(({ value }) => {
+    if (!value) return [];
+    if (Array.isArray(value)) return value;
+    if (typeof value === 'string') return value.split(',').filter(Boolean).map(Number);
+    return [];
+  })
+  assigneeIds?: number[];
+
+  @IsOptional()
+  @IsArray()
+  @Type(() => String)
+  @Transform(({ value }) => {
+    if (!value) return [];
+    if (Array.isArray(value)) return value;
+    if (typeof value === 'string') return value.split(',').filter(Boolean);
+    return [];
+  })
+  statusCodes?: string[];
 }

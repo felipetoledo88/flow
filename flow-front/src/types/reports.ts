@@ -1,9 +1,10 @@
 export interface ReportsFilters {
   startDate?: string;
   endDate?: string;
-  projectId?: number;
-  teamId?: number;
-  assigneeId?: number;
+  projectIds?: number[];
+  teamIds?: number[];
+  assigneeIds?: number[];
+  statusCodes?: string[];
 }
 
 export interface HoursGroup {

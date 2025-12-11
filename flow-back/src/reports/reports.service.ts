@@ -49,18 +49,22 @@ export class ReportsService {
     qb: SelectQueryBuilder<T>,
     filters: ReportsFilterDto,
   ): SelectQueryBuilder<T> {
-    const { startDate, endDate, projectId, teamId, assigneeId } = filters;
+    const { startDate, endDate, projectIds, teamIds, assigneeIds, statusCodes } = filters;
 
-    if (projectId) {
-      qb.andWhere('project.id = :projectId', { projectId });
+    if (projectIds?.length) {
+      qb.andWhere('project.id IN (:...projectIds)', { projectIds });
     }
 
-    if (teamId) {
-      qb.andWhere('team.id = :teamId', { teamId });
+    if (teamIds?.length) {
+      qb.andWhere('team.id IN (:...teamIds)', { teamIds });
     }
 
-    if (assigneeId) {
-      qb.andWhere('task.assignee_id = :assigneeId', { assigneeId });
+    if (assigneeIds?.length) {
+      qb.andWhere('task.assignee_id IN (:...assigneeIds)', { assigneeIds });
+    }
+
+    if (statusCodes?.length) {
+      qb.andWhere('status.code IN (:...statusCodes)', { statusCodes });
     }
 
     if (startDate) {
@@ -78,18 +82,22 @@ export class ReportsService {
     qb: SelectQueryBuilder<T>,
     filters: ReportsFilterDto,
   ): SelectQueryBuilder<T> {
-    const { startDate, endDate, projectId, teamId, assigneeId } = filters;
+    const { startDate, endDate, projectIds, teamIds, assigneeIds, statusCodes } = filters;
 
-    if (projectId) {
-      qb.andWhere('project.id = :projectId', { projectId });
+    if (projectIds?.length) {
+      qb.andWhere('project.id IN (:...projectIds)', { projectIds });
     }
 
-    if (teamId) {
-      qb.andWhere('team.id = :teamId', { teamId });
+    if (teamIds?.length) {
+      qb.andWhere('team.id IN (:...teamIds)', { teamIds });
     }
 
-    if (assigneeId) {
-      qb.andWhere('task.assignee_id = :assigneeId', { assigneeId });
+    if (assigneeIds?.length) {
+      qb.andWhere('task.assignee_id IN (:...assigneeIds)', { assigneeIds });
+    }
+
+    if (statusCodes?.length) {
+      qb.andWhere('status.code IN (:...statusCodes)', { statusCodes });
     }
 
     if (startDate) {
@@ -126,7 +134,8 @@ export class ReportsService {
       .leftJoin('history.task', 'task')
       .leftJoin('task.project', 'project')
       .leftJoin('project.team', 'team')
-      .leftJoin('task.assignee', 'assignee');
+      .leftJoin('task.assignee', 'assignee')
+      .leftJoin('task.status', 'status');
 
     const hoursByProject = (await this.applyFilters(
       historyBaseQuery.clone(),

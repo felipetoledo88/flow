@@ -179,6 +179,14 @@ const ReportsPage: React.FC = () => {
     return [];
   }, [overview, scope]);
 
+  const totalAssigneeHours = useMemo(() => {
+    if (!overview?.tasksByAssignee) return 0;
+    return Object.values(overview.tasksByAssignee).reduce(
+      (sum, group) => sum + (group.totalHours || 0),
+      0
+    );
+  }, [overview?.tasksByAssignee]);
+
   const handleExport = () => {
     if (!overview) return;
 
@@ -461,6 +469,10 @@ const ReportsPage: React.FC = () => {
                             </div>
                           </div>
                         ))}
+                        <div className="flex items-center justify-between border-t pt-3 text-sm font-semibold">
+                          <span>Total geral (colaboradores)</span>
+                          <span>{totalAssigneeHours.toFixed(2)}h</span>
+                        </div>
                       </div>
                     )}
                   </CardContent>
